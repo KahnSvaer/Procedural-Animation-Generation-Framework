@@ -64,9 +64,9 @@ Source: https://www.fisheries.noaa.gov/species/hawksbill-turtle
 Credit: NOAA Fisheries  
 
 ### Sea_Snake.jpg
-Source: https://www.flickr.com/photos/q-phia/8453585901/  
-Credit: q phia  
-License: [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/)  
+Source: https://commons.wikimedia.org/wiki/File:Laticauda_colubrina_Lembeh2.jpg
+Credit: Jens Petersen / Wikimedia Commons
+License: [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)  
 
 ### Sea_Horse.jpg
 Source: https://commons.wikimedia.org/wiki/File:Seahorse_Skeleton_Macro.jpg  
@@ -82,10 +82,10 @@ Source: https://commons.wikimedia.org/wiki/File:Aurelia_aurita_(Cnidaria)_Luc_Vi
 Credit: Luc Viatour / https://Lucnix.be / Wikimedia Commons  
 License: [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)
 
-### Octopus.jpg
+<!-- ### Octopus.jpg
 Source: https://commons.wikimedia.org/wiki/File:Octopus_vulgaris_02.JPG  
 Credit: H. Zell / Wikimedia Commons  
-License: [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)
+License: [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) -->
 
 -----
 
