@@ -1,20 +1,21 @@
 Mackeral                
 Shark                   
-Manta Ray               
+Manta Ray   NOTE: bad results with text to 3D            
 Dolphin                 
 Whale                   
 Seal                    
 Sea Lions               
 Sea Turtle              
 Sea Snake               
-Octopus   NOTE: no image added yet              
+Octopus     NOTE: no image added            
 Squid                   
 Crab                    
 Lobster                 
 Jelly Fish              
-Sea Star                
+Sea Star    NOTE: bad results with text to 3D       
 Penguin                 
-Sea Horse               
+Sea Horse            
 Frog                    
 Tuna                    
 Tadpoles                
+Goldfish

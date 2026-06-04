@@ -1,8 +1,8 @@
 # Image Attributions
 
-### Manta_Ray.jpg
+<!-- ### Manta_Ray.jpg
 Source: https://www.fisheries.noaa.gov/species/giant-manta-ray  
-Credit: NOAA Fisheries
+Credit: NOAA Fisheries -->
 
 ### Crab.jpg 
 Source: https://www.fisheries.noaa.gov/species/blue-crab  
@@ -33,9 +33,9 @@ Credit: NOAA Fisheries
 Source: https://www.fisheries.noaa.gov/species/american-lobster   
 Credit: NOAA Fisheries
 
-### Sea-Star.png
+<!-- ### Sea-Star.png
 Source: https://www.fisheries.noaa.gov/species/sunflower-sea-star  
-Credit: NOAA Fisheries
+Credit: NOAA Fisheries -->
 
 ### Mackeral.jpg
 Source: https://www.fisheries.noaa.gov/species/atlantic-chub-mackerel  
@@ -69,9 +69,7 @@ Credit: Jens Petersen / Wikimedia Commons
 License: [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)  
 
 ### Sea_Horse.jpg
-Source: https://commons.wikimedia.org/wiki/File:Seahorse_Skeleton_Macro.jpg  
-Credit: Jonathan Zander / Wikimedia Commons  
-License: [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)  
+Credit: Self Generated using Stable Diffusion 
 
 ### Squid.png
 Source: https://www.fisheries.noaa.gov/species/shortfin-squid  
@@ -86,6 +84,9 @@ License: [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)
 Source: https://commons.wikimedia.org/wiki/File:Octopus_vulgaris_02.JPG  
 Credit: H. Zell / Wikimedia Commons  
 License: [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) -->
+
+### Goldfish.png
+Credit: Self Generated using Stable Diffusion 
 
 -----
 
