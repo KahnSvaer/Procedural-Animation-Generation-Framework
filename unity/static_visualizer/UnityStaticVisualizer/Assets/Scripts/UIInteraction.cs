@@ -10,21 +10,15 @@ public class UIInteraction : MonoBehaviour
 {
     [SerializeField] private GameObject welcomePanel;
     [SerializeField] private GameObject tutorialPanel;
-    [SerializeField] private GameObject settingsPanel;
-
     [SerializeField] private Button lightButton;
     [SerializeField] private Image lightOnImage;
     [SerializeField] private Image lightOffImage;
     [SerializeField] private Button hintButton;
-    [SerializeField] private Button settingButton;
+    [SerializeField] private Button serverResetButton;
 
     [Header("Spawn Input UI")]
     [SerializeField] private TMP_InputField spawnInputField;
     [SerializeField] private Button spawnSubmitButton;
-
-    [Header("Server Input UI")]
-    [SerializeField] private TMP_InputField serverInputField;
-    [SerializeField] private Button serverSubmitButton;
 
     [SerializeField] private Light helperLight;
 
@@ -33,27 +27,26 @@ public class UIInteraction : MonoBehaviour
 
     private float panelCooldown = 0.1f; // Added to avoid double toggles
     private float lastTutorialCloseTime = -1f;
-    private float lastSettingsCloseTime = -1f;
 
     private Camera mainCamera;
+
+    private ServerStatusChecker serverChecker;
 
     void Start()
     {
         if (welcomePanel) welcomePanel.SetActive(true);
         if (tutorialPanel) tutorialPanel.SetActive(false);
-        if (settingsPanel) settingsPanel.SetActive(false);
         if (lightButton) lightButton.gameObject.SetActive(false);
         if (hintButton) hintButton.gameObject.SetActive(false);
-        if (settingButton) settingButton.gameObject.SetActive(false);
+        if (serverResetButton) serverResetButton.gameObject.SetActive(false);
         if (spawnSubmitButton) spawnSubmitButton.gameObject.SetActive(false);
         if (spawnInputField) spawnInputField.gameObject.SetActive(false);
 
         if (lightButton) lightButton.onClick.AddListener(ToggleLight);
         if (hintButton) hintButton.onClick.AddListener(ShowTutorial);
-        if (settingButton) settingButton.onClick.AddListener(OpenSettings);
+        if (serverResetButton) serverResetButton.onClick.AddListener(ServerReset);
 
         if (spawnSubmitButton) spawnSubmitButton.onClick.AddListener(OnSpawnSubmit);
-        if (serverSubmitButton) serverSubmitButton.onClick.AddListener(OnServerSubmit);
 
         lightOn = true;
         if (helperLight) helperLight.enabled = true;
@@ -61,9 +54,13 @@ public class UIInteraction : MonoBehaviour
 
         if (lightButton) allButtons.Add(lightButton);
         if (hintButton) allButtons.Add(hintButton);
-        if (settingButton) allButtons.Add(settingButton);
+        if (serverResetButton) allButtons.Add(serverResetButton);
+        if (spawnSubmitButton) allButtons.Add(spawnSubmitButton);
 
         mainCamera = Camera.main;
+
+        serverChecker = GetComponent<ServerStatusChecker>();
+
     }
 
     void Update()
@@ -74,7 +71,6 @@ public class UIInteraction : MonoBehaviour
             {
                 if (welcomePanel.activeSelf) CloseWelcome();
                 else if (tutorialPanel.activeSelf) HideTutorial();
-                else if (settingsPanel.activeSelf) CloseSettings();
             }
         }
 
@@ -82,7 +78,6 @@ public class UIInteraction : MonoBehaviour
         {
             if (welcomePanel.activeSelf && !IsPointerOverUI(welcomePanel)) CloseWelcome();
             else if (tutorialPanel.activeSelf && !IsPointerOverUI(tutorialPanel)) HideTutorial();
-            else if (settingsPanel.activeSelf && !IsPointerOverUI(settingsPanel)) CloseSettings();
         }
     }
 
@@ -123,30 +118,12 @@ public class UIInteraction : MonoBehaviour
 
         if (lightButton) lightButton.gameObject.SetActive(true);
         if (hintButton) hintButton.gameObject.SetActive(true);
-        if (settingButton) settingButton.gameObject.SetActive(true);
         if (spawnSubmitButton) spawnSubmitButton.gameObject.SetActive(true);
         if (spawnInputField) spawnInputField.gameObject.SetActive(true);
+        if (serverResetButton) serverResetButton.gameObject.SetActive(true);
         
         StartCoroutine(UnlockButtonsWithDelay());
     }
-
-    private void OpenSettings()
-    {
-        if (settingsPanel.activeSelf) return;
-        if (Time.time - lastSettingsCloseTime < panelCooldown) return;
-
-        settingsPanel.SetActive(true);
-        BlockAllButtons(true);
-    }
-
-    private void CloseSettings()
-    {
-        if (!settingsPanel.activeSelf) return;
-        settingsPanel.SetActive(false);
-        StartCoroutine(UnlockButtonsWithDelay());
-        lastSettingsCloseTime = Time.time;
-    }
-
     private void OnSpawnSubmit()
     {
         if (!spawnInputField) return;
@@ -156,15 +133,6 @@ public class UIInteraction : MonoBehaviour
         Vector3 pivot = mainCamera.GetComponent<InteractionManager>().pivotPoint;
         GetComponent<RuntimeGLTFUnzipAndApply>().Spawner(value, pivot, Quaternion.LookRotation(mainCamera.transform.position - pivot));
         spawnInputField.text = string.Empty;
-    }
-
-    private void OnServerSubmit()
-    {
-        if (!serverInputField) return;
-        string value = serverInputField.text.Trim();
-        Debug.Log("Server submitted: " + value);
-
-        GetComponent<ServerStatusChecker>().SetServerUrl(value);
     }
 
     private bool IsPointerOverUI(GameObject panel)
@@ -187,6 +155,16 @@ public class UIInteraction : MonoBehaviour
             if (!btn) continue;
             btn.interactable = !block;
         }
+    }
+
+    private async void ServerReset()
+    {
+        if (serverChecker == null)
+        {
+            Debug.LogError("ServerStatusChecker component not found on UIInteraction object.");
+            return;
+        }
+        await serverChecker.SetServerUrl();
     }
 
     private IEnumerator UnlockButtonsWithDelay()

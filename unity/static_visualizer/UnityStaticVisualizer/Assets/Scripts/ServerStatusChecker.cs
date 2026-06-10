@@ -4,16 +4,16 @@ using System.Threading.Tasks;
 
 public class ServerStatusChecker : MonoBehaviour
 {
-    [Header("Server URL (should return 200 OK)")]
-    public string serverUrl = "https://example.com/get-3d-file";
+    public string serverUrl = null;
 
-    public void SetServerUrl(string url)
+    public async Task SetServerUrl()
     {
-        serverUrl = url;
-        CheckServerStatus();
+        string serverUrlLocal = await GetNGrokEndpoint.GetEndpoint(); 
+        this.serverUrl = serverUrlLocal;
+        await CheckServerStatus();
     }
 
-    async void CheckServerStatus()
+    async Task CheckServerStatus()
     {
         if (string.IsNullOrEmpty(serverUrl))
         {
@@ -50,4 +50,10 @@ public class ServerStatusChecker : MonoBehaviour
 #endif
         }
     }
+
+    async void Start()
+    {
+         await SetServerUrl();
+    }
 }
+    

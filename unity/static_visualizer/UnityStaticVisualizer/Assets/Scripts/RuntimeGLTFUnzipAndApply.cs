@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using System.IO;
 using UnityEngine.Networking;
 using System.IO.Compression;
+using System;
 
 [RequireComponent(typeof(ServerStatusChecker))]
 [RequireComponent(typeof(CallbackClass))]
@@ -22,9 +23,23 @@ public class RuntimeGLTFUnzipAndApply : MonoBehaviour
     // Public entrypoint, called externally
     public async void Spawner(string concept = null, Vector3 position = default, Quaternion rotation = default)
     {
-        string glbZipUrlServer = GetComponent<ServerStatusChecker>().serverUrl;
-        glbZipUrl = glbZipUrlServer + "process-3d-file";
-        if (string.IsNullOrEmpty(glbZipUrlServer))
+        ServerStatusChecker checker = GetComponent<ServerStatusChecker>();
+        if (checker == null)
+        {
+            Debug.LogError("ServerStatusChecker component not found.");
+            return;
+        }
+
+        if (string.IsNullOrEmpty(checker.serverUrl))
+        {
+            Debug.LogError("Server URL has not been loaded yet.");
+            return;
+        }
+
+        string glbZipUrlServer = checker.serverUrl;
+        this.glbZipUrl = new Uri(new Uri(glbZipUrlServer), "process-3d-file").ToString();
+        
+        if (string.IsNullOrEmpty(glbZipUrl))
         {
             Debug.LogError("Server URL is empty. Please set it in the ServerStatusChecker component.");
             return;
