@@ -11,6 +11,7 @@ dependencies = [
     "pillow>=12.2.0",
     "pyrender>=0.1.45",
     "pytest>=9.0.3",
+    "python-dotenv>=1.2.2",
     "rembg[gpu]>=2.0.75",
     "torch==2.6.0",
     "torchvision==0.21.0",
