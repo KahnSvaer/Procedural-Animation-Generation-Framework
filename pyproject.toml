@@ -3,7 +3,7 @@ name = "animationgenerationgsoc"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<=3.13"
 dependencies = [
     "accelerate>=1.13.0",
     "numpy>=2.0.0",
@@ -17,6 +17,7 @@ dependencies = [
     "torchvision==0.21.0",
     "transformers>=5.9.0",
     "trimesh>=4.12.2",
+    "pytorch3d==0.7.9"
 ]
 
 [[tool.uv.index]]
@@ -27,3 +28,9 @@ explicit = true
 [tool.uv.sources]
 torch = { index = "pytorch" }
 torchvision = { index = "pytorch" }
+
+pytorch3d = [
+    { url = "https://github.com/MiroPsota/torch_packages_builder/releases/download/pytorch3d-0.7.9/pytorch3d-0.7.9+pt2.6.0cu124-cp311-cp311-linux_x86_64.whl", marker = "python_version == '3.11'" },
+    { url = "https://github.com/MiroPsota/torch_packages_builder/releases/download/pytorch3d-0.7.9/pytorch3d-0.7.9+pt2.6.0cu124-cp312-cp312-linux_x86_64.whl", marker = "python_version == '3.12'" },
+    { url = "https://github.com/MiroPsota/torch_packages_builder/releases/download/pytorch3d-0.7.9/pytorch3d-0.7.9+pt2.6.0cu124-cp313-cp313-linux_x86_64.whl", marker = "python_version == '3.13'" }
+]
