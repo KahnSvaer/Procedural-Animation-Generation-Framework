@@ -20,6 +20,8 @@ public class RuntimeGLTFUnzipAndApply : MonoBehaviour
     private string unzipFolder;
     private string zipPath;
 
+    [SerializeField] private int MaxRetries = 5; 
+
     // Public entrypoint, called externally
     public async void Spawner(string concept = null, Vector3 position = default, Quaternion rotation = default)
     {
@@ -64,23 +66,55 @@ public class RuntimeGLTFUnzipAndApply : MonoBehaviour
         zipPath = Path.Combine(Application.persistentDataPath, "model.zip");
 
         // Build POST request with form data
-        WWWForm form = new WWWForm();
-        form.AddField("concept", conceptName);
+        bool downloadSucceeded = false;
 
-        UnityWebRequest www = UnityWebRequest.Post(glbZipUrl, form);
-        www.downloadHandler = new DownloadHandlerFile(zipPath);
-
-        await www.SendWebRequest();
-
-        Debug.Log("Download completed with response code: " + www.responseCode);
-
-#if UNITY_2020_1_OR_NEWER
-        if (www.result != UnityWebRequest.Result.Success)
-#else
-        if (www.isNetworkError || www.isHttpError)
-#endif
+        for (int attempt = 1; attempt <= MaxRetries; attempt++)
         {
-            Debug.LogError($"ZIP download failed ({www.responseCode}): {www.error}");
+            WWWForm form = new WWWForm();
+            form.AddField("concept", conceptName);
+
+            using var www = UnityWebRequest.Post(glbZipUrl, form);
+            www.downloadHandler = new DownloadHandlerFile(zipPath);
+            
+            await www.SendWebRequest();
+
+            Debug.Log(
+                $"Attempt {attempt}: Response Code = {www.responseCode}"
+            );
+
+        #if UNITY_2020_1_OR_NEWER
+            bool success =
+                www.result == UnityWebRequest.Result.Success;
+        #else
+            bool success =
+                !(www.isNetworkError || www.isHttpError);
+        #endif
+
+            if (success)
+            {
+                downloadSucceeded = true;
+                break;
+            }
+            if (www.responseCode == 503)
+            {
+                Debug.LogWarning(
+                    $"Server busy/not ready. " +
+                    $"Retrying in 5 seconds..."
+                );
+
+                await Task.Delay(5000);
+                continue;
+            }
+            Debug.LogError(
+                $"ZIP download failed ({www.responseCode}): {www.error}"
+            );
+            return;
+        }
+        if (!downloadSucceeded)
+        {
+            Debug.LogError(
+                "Failed to download model after all retry attempts."
+            );
             return;
         }
 
