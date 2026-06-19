@@ -3,7 +3,7 @@ name = "animationgenerationgsoc"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.11,<=3.13"
+requires-python = ">=3.11,<3.14"
 dependencies = [
     "accelerate>=1.13.0",
     "numpy>=2.0.0",
@@ -17,8 +17,12 @@ dependencies = [
     "torchvision==0.21.0",
     "transformers>=5.9.0",
     "trimesh>=4.12.2",
-    "pytorch3d==0.7.9"
+    "pytorch3d==0.7.9",
+    "bpy>=4.4.0",
 ]
+
+[tool.setuptools]
+packages = ["animgen"]
 
 [[tool.uv.index]]
 name = "pytorch"
