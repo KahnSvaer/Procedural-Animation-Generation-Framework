@@ -55,8 +55,11 @@ def render_views(
     mesh: trimesh.Trimesh,
     num_views: int = 8,
     vertical_angles: List[float] = [-30, 0, 30],
-    viewport_size: tuple = (640, 480),
-) -> tuple[List[np.ndarray], np.ndarray]:
+    viewport_size: tuple = (1024, 1024),
+    distance: float = 2.0,
+    yfov_diff_ratio = 3.0,
+    debug:bool = False
+) -> tuple[List[np.ndarray], List[np.ndarray], np.ndarray]:
 
     scene = pyrender.Scene(
         bg_color=[255, 255, 255, 255],
@@ -77,17 +80,18 @@ def render_views(
     vertical_angles_rad = np.radians(vertical_angles)
 
     rendered_images = []
+    rendered_depth = []
 
     camera_pose_list = _generate_poses(
         vertical_angles=vertical_angles_rad, 
         horizontal_angles=horizontal_angles_rad, 
-        distance=2.0
+        distance=distance
     ) # pre-generate camera poses for debugging
 
     for camera_pose in camera_pose_list:
 
         camera = pyrender.PerspectiveCamera(
-            yfov=np.pi / 3.0
+            yfov=np.pi / yfov_diff_ratio
         )
 
         light = pyrender.DirectionalLight(
@@ -109,12 +113,20 @@ def render_views(
         if result is None:
             raise RuntimeError("Renderer returned None, rendering failed.")
         
-        color, _ = result
+        color, depth = result
 
         rendered_images.append(color)
+        rendered_depth.append(depth)
+
+        if debug:
+            from PIL import Image
+            Image.fromarray(color).show()
+            Image.fromarray(depth).show()
+
+            assert False, "Debug mode"
 
         scene.remove_node(camera_node)
         scene.remove_node(light_node)
 
     renderer.delete()
-    return rendered_images, camera_pose_list # camera poses returned for debugging 
+    return rendered_images, rendered_depth, camera_pose_list # camera poses returned for debugging 
