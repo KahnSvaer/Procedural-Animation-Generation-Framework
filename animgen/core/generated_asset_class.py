@@ -2,15 +2,17 @@ from pathlib import Path
 
 import numpy as np
 import trimesh
-from typing import List, Union
 
 from ..io.model_io import load_model
 
 from animgen.render_views import render_views
 
 class GeneratedAssetClass:
-    def __init__(self, path: Union[str, Path]):
-        self.mesh: trimesh.Trimesh = load_model(path)
+    def __init__(self, mesh: str | Path | trimesh.Trimesh):
+        if not isinstance(mesh, trimesh.Trimesh):
+            self.mesh: trimesh.Trimesh = load_model(mesh)
+        else:
+            self.mesh: trimesh.Trimesh = mesh
         self.mesh = self._preprocess(self.mesh)
         self.render_config = {
             "yfov_ratio" : 3.0,
@@ -48,12 +50,12 @@ class GeneratedAssetClass:
     def get_views(
         self,
         num_views: int = 8,
-        vertical_angles: List[float] = [-30, 0, 30],
+        vertical_angles: list[float] = [-30, 0, 30],
         viewport_size: tuple[int, int] = (1024, 1024),
         distance = 2.0,
         yfov_diff_ratio = 3.0,
         debug: bool = False
-    ) -> tuple[List[np.ndarray], List[np.ndarray], np.ndarray]:
+    ) -> tuple[list[np.ndarray], list[np.ndarray], np.ndarray]:
         return render_views(mesh = self.mesh, 
                             num_views=num_views, 
                             vertical_angles=vertical_angles, 

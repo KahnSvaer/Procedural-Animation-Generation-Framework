@@ -1,12 +1,12 @@
 from PIL import Image
 from pathlib import Path
-from typing import Union, cast
+from typing import cast
 
 import torch # Allows rembg to use cuda libraries added with torch+cu124
 import rembg
 
 class ImageClass:
-    def __init__(self, path: Union[str, Path]):
+    def __init__(self, path: str | Path):
         self.image: Image.Image = Image.open(path)
         self.name = Path(path).stem.replace("_", " ").title()
     
@@ -32,7 +32,7 @@ class ImageClass:
     def show(self):
         self.image.show()
     
-    def save(self, path: Union[str, Path]):
+    def save(self, path: str | Path):
         self.image.save(path)
 
 if __name__ == "__main__":
