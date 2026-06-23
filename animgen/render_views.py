@@ -1,5 +1,4 @@
 import trimesh
-from typing import List
 import numpy as np
 import pyrender
 
@@ -26,8 +25,9 @@ def _look_at(camera_position, target=[0, 0, 0], up=[0, 1, 0]):
 
 
 def _generate_poses(vertical_angles: np.ndarray, horizontal_angles: np.ndarray, distance: float):
-    #MonkeyPatch to avoid numpy deprecation warning in pyrender
-    np.infty = np.inf
+    # Monkey patch to avoid numpy deprecation warning in pyrender
+    if not hasattr(np, "infty"):
+        setattr(np, "infty", np.inf) 
 
     poses = []
 
@@ -54,12 +54,12 @@ def _generate_poses(vertical_angles: np.ndarray, horizontal_angles: np.ndarray, 
 def render_views(
     mesh: trimesh.Trimesh,
     num_views: int = 8,
-    vertical_angles: List[float] = [-30, 0, 30],
+    vertical_angles: list[float] = [-30, 0, 30],
     viewport_size: tuple = (1024, 1024),
     distance: float = 2.0,
     yfov_diff_ratio = 3.0,
     debug:bool = False
-) -> tuple[List[np.ndarray], List[np.ndarray], np.ndarray]:
+) -> tuple[list[np.ndarray], list[np.ndarray], np.ndarray]:
 
     scene = pyrender.Scene(
         bg_color=[255, 255, 255, 255],
