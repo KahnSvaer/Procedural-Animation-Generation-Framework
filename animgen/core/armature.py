@@ -1,6 +1,6 @@
 import uuid
+from .types import Vec3
 
-Vec3 = tuple[float, float, float]
 
 def generate_unique_id() -> str:
     return str(uuid.uuid4())
