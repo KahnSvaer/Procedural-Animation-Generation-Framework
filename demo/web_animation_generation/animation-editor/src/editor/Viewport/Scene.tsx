@@ -4,7 +4,8 @@ import {
     GizmoHelper,
     GizmoViewport
 } from "@react-three/drei";
-import Cube from "./Cube";
+import PlaceHolderCube from "./Cube";
+import { useModelStore } from "../../stores/modelStore";
 
 import { useEffect, useRef } from "react";
 import { OrbitControls as OrbitControlsImpl } from "three-stdlib";
@@ -18,6 +19,8 @@ import { useThree } from "@react-three/fiber";
 function Scene() {
     const controlsRef = useRef<OrbitControlsImpl>(null);
     const { camera } = useThree();
+
+    const model = useModelStore((state) => state.model);
 
     const resetVersion = useCameraStore(
         (state) => state.resetVersion
@@ -53,7 +56,11 @@ function Scene() {
                 infiniteGrid
             />
 
-            <Cube />
+            {model ? (
+                <primitive object={model} />
+            ) : (
+                <PlaceHolderCube />
+            )}
 
             <GizmoHelper alignment="top-right">
                 <GizmoViewport />

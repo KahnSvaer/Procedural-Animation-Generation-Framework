@@ -1,4 +1,4 @@
-function Cube() {
+function PlaceHolderCube() {
   return (
     <mesh>
       <boxGeometry args={[1, 1, 1]} />
@@ -8,4 +8,4 @@ function Cube() {
   );
 }
 
-export default Cube;
+export default PlaceHolderCube;
