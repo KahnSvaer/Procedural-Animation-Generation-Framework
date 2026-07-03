@@ -1,8 +1,8 @@
 import "./index.css";
 
-import Toolbar from "./components/Toolbar";
-import Viewport from "./components/Viewport";
-import Inspector from "./components/Inspector";
+import Toolbar from "./components/Toolbar/Toolbar";
+import Viewport from "./editor/Viewport/Viewport";
+import Inspector from "./components/Inspector/Inspector";
 
 import {
   Group,
