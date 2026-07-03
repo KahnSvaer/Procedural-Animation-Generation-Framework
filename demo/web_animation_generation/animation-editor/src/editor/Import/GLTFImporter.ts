@@ -3,21 +3,27 @@ import { Group } from "three";
 
 const loader = new GLTFLoader();
 
-export function importGLTF(file: File): Promise<Group> {
+export function importGLTF(url: string): Promise<Group> {
     return new Promise((resolve, reject) => {
-        const url = URL.createObjectURL(file);
-
         loader.load(
             url,
             (gltf: GLTF) => {
-                URL.revokeObjectURL(url);
                 resolve(gltf.scene);
             },
             undefined,
             (error: unknown) => {
-                URL.revokeObjectURL(url);
                 reject(error);
             }
         );
     });
+}
+
+export async function importGLTFFromFile(file: File): Promise<Group> {
+    const url = URL.createObjectURL(file);
+
+    try {
+        return await importGLTF(url);
+    } finally {
+        URL.revokeObjectURL(url);
+    }
 }

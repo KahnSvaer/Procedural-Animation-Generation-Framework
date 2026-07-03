@@ -4,7 +4,7 @@ import { useModelStore } from "../../stores/modelStore";
 import { useRef } from "react";
 
 import FilePicker from "../Import/FilePicker";
-import { importGLTF } from "../Import/GLTFImporter";
+import { importGLTFFromFile } from "../Import/GLTFImporter";
 
 function Toolbar() {
   const filePickerRef = useRef<HTMLInputElement>(null);
@@ -17,7 +17,7 @@ function Toolbar() {
 
   const handleFileSelected = async (file: File) => {
     try {
-        const model = await importGLTF(file);
+        const model = await importGLTFFromFile(file);
 
         setModel(model);
     } catch (error) {
