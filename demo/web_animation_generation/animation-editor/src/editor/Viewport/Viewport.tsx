@@ -9,10 +9,6 @@ function Viewport() {
           width: "100%",
           height: "100%",
         }}
-        camera={{
-          position: [0, 0, 5],
-          fov: 50,
-        }}
       >
         <Scene />
       </Canvas>

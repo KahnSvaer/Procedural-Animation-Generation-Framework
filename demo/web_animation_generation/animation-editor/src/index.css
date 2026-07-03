@@ -64,6 +64,16 @@ body,
     border-right: 1px solid #3b3b3b;
 }
 
+h2 {
+    color: white;
+    font-weight: 500;
+}
+
+
+/* ===========================
+   Inspector
+=========================== */
+
 .inspector {
     width: 100%;
     height: 100%;
@@ -72,7 +82,31 @@ body,
     padding: 20px;
 }
 
-h2 {
+.inspector-section {
+    margin-bottom: 24px;
+}
+
+.inspector-section h3 {
     color: white;
-    font-weight: 500;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+
+    border-bottom: 1px solid #444;
+    font-size: 18px;
+}
+
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    padding: 10px 0;
+
+    border-bottom: 1px solid #333;
+
+    color: #ddd;
+}
+
+.stat-row:last-child {
+    border-bottom: none;
 }
