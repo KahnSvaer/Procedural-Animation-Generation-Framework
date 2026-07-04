@@ -5,15 +5,7 @@ Reference: https://github.com/gtangg12/samesh/blob/main/src/samesh/utils/polyhed
 """
 
 import numpy as np
-
-
-def _build_position_registry():
-    return {
-        name.removeprefix("pos_"): obj
-        for name, obj in globals().items()
-        if callable(obj) and name.startswith("pos_")
-    }
-POSITION_GENERATORS = _build_position_registry()
+from typing import Callable
 
 
 def _golden_ratio():
@@ -123,3 +115,13 @@ def pos_swirl(
             np.sin(cycles * thetas[i]) * np.cos(phi),
         ])
     return np.array(coords)
+
+# Pushed to back since stupid python is interpreted language and this functoion requires the rest of the functions to load in memory first
+def _build_position_registry():
+    return {
+        name.removeprefix("pos_"): obj
+        for name, obj in globals().items()
+        if callable(obj) and name.startswith("pos_")
+    }
+POSITION_GENERATORS: dict[str, Callable] = _build_position_registry() 
+
