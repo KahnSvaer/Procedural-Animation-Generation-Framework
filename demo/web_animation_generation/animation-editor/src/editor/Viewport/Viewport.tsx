@@ -5,6 +5,9 @@ function Viewport() {
   return (
     <section className="viewport">
       <Canvas
+        gl={{
+          preserveDrawingBuffer: true,
+        }}
         style={{
           width: "100%",
           height: "100%",

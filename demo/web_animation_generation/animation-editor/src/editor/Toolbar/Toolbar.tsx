@@ -1,5 +1,6 @@
 import { useCameraStore } from "../../stores/cameraStore";
 import { useModelStore } from "../../stores/modelStore";
+import { useScreenshotStore } from "../../stores/screenshotStore";
 
 import { useRef } from "react";
 
@@ -19,11 +20,15 @@ function Toolbar() {
     try {
         const model = await importGLTFFromFile(file);
 
-        setModel(model);
+        setModel(model, file.name);
     } catch (error) {
         console.error(error);
     }
-};
+  };
+
+  const requestScreenshot = useScreenshotStore(
+    (state) => state.requestScreenshot
+  );
 
   return (
     <header className="toolbar">
@@ -35,7 +40,10 @@ function Toolbar() {
         Reset Camera
       </button>
 
-      <button>Export</button>
+      <button onClick={requestScreenshot}>
+          {/* Later change it to export with screenshot just being one of the options inside the dropdown */}
+          Screenshot 
+      </button>
 
       <FilePicker ref={filePickerRef} onFileSelected={(file) => handleFileSelected(file)} />
 

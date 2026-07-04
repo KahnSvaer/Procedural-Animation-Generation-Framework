@@ -16,15 +16,26 @@ import {
 } from "../../constants/camera";
 import { useThree } from "@react-three/fiber";
 
+import { useScreenshotStore } from "../../stores/screenshotStore";
+
 function Scene() {
     const controlsRef = useRef<OrbitControlsImpl>(null);
-    const { camera } = useThree();
+    const { camera, gl } = useThree();
 
     const model = useModelStore((state) => state.model);
 
     const resetVersion = useCameraStore(
         (state) => state.resetVersion
     );
+
+    const screenshotVersion = useScreenshotStore(
+        (state) => state.screenshotVersion
+    );
+
+    const modelName = useModelStore(
+        (state) => state.modelName
+    );
+
 
     useEffect(() => {
         controlsRef.current?.target.copy(DEFAULT_CAMERA_TARGET);
@@ -38,6 +49,18 @@ function Scene() {
         controlsRef.current?.update();
         console.log("Camera reset requested.");
     }, [camera, resetVersion]);
+
+    useEffect(() => {
+        if (screenshotVersion === 0) return;
+        const dataURL = gl.domElement.toDataURL("image/png");
+        const link = document.createElement("a");
+        const filename = modelName
+            ? modelName.replace(/\.[^/.]+$/, "")
+            : "Untitled Model";
+        link.download = `${filename}.png`;
+        link.href = dataURL;
+        link.click();
+    }, [screenshotVersion]);
 
     return (
         <>
