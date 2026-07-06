@@ -5,7 +5,6 @@ import trimesh
 
 from animgen.renderer.renderer import Renderer, render_multiview
 from animgen.io.model_io import load_model
-from animgen.utils.camera_position import POSITION_GENERATORS
 
 class GeneratedAssetClass:
     def __init__(self, mesh: str | Path | trimesh.Trimesh):
@@ -20,9 +19,11 @@ class GeneratedAssetClass:
             renderer_args={
                 'return_colored': False,
             },
-            sampling_args=None # None needed for dodecahedron sampling
+            sampling_args={
+                'radius': 1.5,
+            }
         )
-        self.
+        self.adj_graph = self.mesh.face_adjacency
 
     @property
     def vertices(self) -> np.ndarray:
@@ -55,8 +56,8 @@ class GeneratedAssetClass:
     def _get_views(
         self,
         camera_generation_method: str = 'random_sphere',
-        renderer_args: dict | None = None,
-        sampling_args: dict | None = None,
+        renderer_args: dict = {},
+        sampling_args: dict = {},
         verbose: bool = True
     ):
         """
