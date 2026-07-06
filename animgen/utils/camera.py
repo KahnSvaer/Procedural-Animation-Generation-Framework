@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 
 from animgen.core.types import Vec3Tensor, PoseTransforms
-from animgen.utils.camera_position import POSITION_GENERATORS 
+from animgen.utils.camera_position import POSITION_GENERATORS
 
 
 def matrix3x4_to_4x4(matrix3x4) -> PoseTransforms:
@@ -21,7 +21,7 @@ def view_matrix(
     camera_positions: Vec3Tensor,
     lookat_position: Vec3Tensor = torch.tensor([0, 0, 0]),
     up: Vec3Tensor = torch.tensor([0, 1, 0]),
-    ) -> PoseTransforms:
+) -> PoseTransforms:
     """
     Given lookat position, camera position, and up vector, compute cam2world poses.
     """
@@ -32,25 +32,34 @@ def view_matrix(
     camera_positions = camera_positions.float()
     lookat_position = lookat_position.float()
 
-    cam_u = up.unsqueeze(0).repeat(len(lookat_position), 1).float().to(camera_positions.device)
+    cam_u = (
+        up.unsqueeze(0)
+        .repeat(len(lookat_position), 1)
+        .float()
+        .to(camera_positions.device)
+    )
 
     # handle degenerate cases
-    crossp = torch.abs(torch.cross(lookat_position - camera_positions, cam_u, dim=-1)).max(dim=-1).values
+    crossp = (
+        torch.abs(torch.cross(lookat_position - camera_positions, cam_u, dim=-1))
+        .max(dim=-1)
+        .values
+    )
     camera_positions[crossp < 1e-6] += 1e-6
 
     cam_z = F.normalize((lookat_position - camera_positions), dim=-1)
     cam_x = F.normalize(torch.cross(cam_z, cam_u, dim=-1), dim=-1)
     cam_y = F.normalize(torch.cross(cam_x, cam_z, dim=-1), dim=-1)
-    poses = torch.stack([cam_x, cam_y, -cam_z, camera_positions], dim=-1) # same as nerfstudio convention [right, up, -lookat]
+    poses = torch.stack(
+        [cam_x, cam_y, -cam_z, camera_positions], dim=-1
+    )  # same as nerfstudio convention [right, up, -lookat]
     poses = matrix3x4_to_4x4(poses)
     return poses
 
 
 def sample_view_matrices(
-        n: int, 
-        radius: float, 
-        lookat_position: Vec3Tensor = torch.tensor([0, 0, 0])
-    ) -> PoseTransforms:
+    n: int, radius: float, lookat_position: Vec3Tensor = torch.tensor([0, 0, 0])
+) -> PoseTransforms:
     """
     Sample n uniformly distributed view matrices spherically with given radius.
     """
@@ -64,16 +73,16 @@ def sample_view_matrices(
     return view_matrix(
         camera_position.to(lookat_position.device),
         lookat_position,
-        up=torch.tensor([0, 1, 0], device=lookat_position.device)
+        up=torch.tensor([0, 1, 0], device=lookat_position.device),
     )
 
 
 def sample_view_matrices_polyhedra(
-        polygon: str, 
-        radius: float, 
-        lookat_position: Vec3Tensor = torch.tensor([0, 0, 0]),
-        **kwargs
-    ) -> PoseTransforms:
+    polygon: str,
+    radius: float,
+    lookat_position: Vec3Tensor = torch.tensor([0, 0, 0]),
+    **kwargs,
+) -> PoseTransforms:
     """
     Sample view matrices according to a polygon with given radius.
     """
@@ -84,19 +93,19 @@ def sample_view_matrices_polyhedra(
     return view_matrix(
         camera_position.to(lookat_position.device) + lookat_position,
         lookat_position,
-        up=torch.tensor([0, 1, 0], device=lookat_position.device)
+        up=torch.tensor([0, 1, 0], device=lookat_position.device),
     )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     m = view_matrix(
-        torch.tensor([0, 0, 1]).unsqueeze(0), 
+        torch.tensor([0, 0, 1]).unsqueeze(0),
         torch.tensor([0, 0, 0]).unsqueeze(0),
     )
     print(m)
 
     m = view_matrix(
-        torch.tensor([0, 0, 1]), 
+        torch.tensor([0, 0, 1]),
         torch.tensor([0, 0, 0]),
     )
     print(m)

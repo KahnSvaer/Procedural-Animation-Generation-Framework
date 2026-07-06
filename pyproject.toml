@@ -10,7 +10,6 @@ dependencies = [
     "opencv-python>=4.12.0",
     "pillow>=12.2.0",
     "pyrender>=0.1.45",
-    "pytest>=9.0.3",
     "python-dotenv>=1.2.2",
     "rembg[gpu]>=2.0.75",
     "pymatting==1.1.15", 
@@ -41,4 +40,12 @@ pytorch3d = [
     { url = "https://github.com/MiroPsota/torch_packages_builder/releases/download/pytorch3d-0.7.9/pytorch3d-0.7.9+pt2.6.0cu124-cp311-cp311-linux_x86_64.whl", marker = "python_version == '3.11'" },
     { url = "https://github.com/MiroPsota/torch_packages_builder/releases/download/pytorch3d-0.7.9/pytorch3d-0.7.9+pt2.6.0cu124-cp312-cp312-linux_x86_64.whl", marker = "python_version == '3.12'" },
     { url = "https://github.com/MiroPsota/torch_packages_builder/releases/download/pytorch3d-0.7.9/pytorch3d-0.7.9+pt2.6.0cu124-cp313-cp313-linux_x86_64.whl", marker = "python_version == '3.13'" }
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.3.0",
+    "pytest>=9.1.1",
+    "pyvista>=0.48.4",
+    "ruff>=0.15.20",
 ]

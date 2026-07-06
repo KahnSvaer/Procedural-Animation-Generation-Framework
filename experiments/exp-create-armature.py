@@ -1,12 +1,14 @@
 import sys
+
 sys.path.append(".")
 
 from animgen.core.armature import Armature, Bones
 
 import bpy
 
+
 def clear_scene():
-    bpy.ops.object.select_all(action='SELECT')
+    bpy.ops.object.select_all(action="SELECT")
     bpy.ops.object.delete()
 
     # Remove orphaned datablocks
@@ -21,7 +23,7 @@ def clear_scene():
         for block in collection:
             if block.users == 0:
                 collection.remove(block)
-                
+
 
 def create_blender_armature(armature_data):
     # Create armature datablock
@@ -32,7 +34,7 @@ def create_blender_armature(armature_data):
 
     # Enter edit mode
     bpy.context.view_layer.objects.active = arm_obj
-    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.object.mode_set(mode="EDIT")
 
     edit_bones = {}
 
@@ -53,42 +55,24 @@ def create_blender_armature(armature_data):
 
     create_bone_recursive(armature_data.root_bone)
 
-    bpy.ops.object.mode_set(mode='OBJECT')
+    bpy.ops.object.mode_set(mode="OBJECT")
 
     return arm_obj
 
 
 if __name__ == "__main__":
-
     clear_scene()
 
-    root = Bones(
-        id="root",
-        head=(0, 0, 0),
-        tail=(0, 0, 1)
-    )
+    root = Bones(id="root", head=(0, 0, 0), tail=(0, 0, 1))
 
     armature = Armature(root)
 
-    spine = armature.add_connected_bone(
-        parent=root,
-        tail=(0, 0, 2)
-    )
+    spine = armature.add_connected_bone(parent=root, tail=(0, 0, 2))
 
-    neck = armature.add_connected_bone(
-        parent=spine,
-        tail=(0, 0, 3)
-    )
+    neck = armature.add_connected_bone(parent=spine, tail=(0, 0, 3))
 
-    arm = armature.add_unconnected_bone(
-        parent=root,
-        head=(0.5, 0, 1),
-        tail=(1.5, 0, 1)
-    )
+    arm = armature.add_unconnected_bone(parent=root, head=(0.5, 0, 1), tail=(1.5, 0, 1))
 
     create_blender_armature(armature)
 
-    bpy.ops.wm.save_as_mainfile(
-        filepath="./generated_data/rigged/test_armature.blend"
-    )
-
+    bpy.ops.wm.save_as_mainfile(filepath="./generated_data/rigged/test_armature.blend")

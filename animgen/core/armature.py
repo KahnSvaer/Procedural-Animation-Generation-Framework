@@ -5,15 +5,17 @@ from .types import Vec3
 def generate_unique_id() -> str:
     return str(uuid.uuid4())
 
+
 class Bones:
     def __init__(
-            self, id: str = "",  
-            parent: 'Bones | None' = None, 
-            head: Vec3 | None = None, 
-            tail: Vec3 = (0, 0, 0),
-            is_connected_to_parent: bool = False
-        ):
-        
+        self,
+        id: str = "",
+        parent: "Bones | None" = None,
+        head: Vec3 | None = None,
+        tail: Vec3 = (0, 0, 0),
+        is_connected_to_parent: bool = False,
+    ):
+
         self.id = id
         if self.id == "":
             self.id = generate_unique_id()
@@ -34,25 +36,30 @@ class Bones:
 
 
 class Armature:
-    
     def __init__(self, root_bone: Bones):
         self.root_bone: Bones = root_bone
         self.bones_list: list[Bones] = [root_bone]
-        self.disconnected_chain_roots: list[Bones] = [root_bone]  # List stores unconnected bones
+        self.disconnected_chain_roots: list[Bones] = [
+            root_bone
+        ]  # List stores unconnected bones
 
     def add_connected_bone(self, parent: Bones, tail: Vec3) -> Bones:
-        new_bone = Bones(parent=parent, head=parent.tail, tail=tail, is_connected_to_parent=True)
+        new_bone = Bones(
+            parent=parent, head=parent.tail, tail=tail, is_connected_to_parent=True
+        )
         parent.child.append(new_bone)
         self.bones_list.append(new_bone)
         return new_bone
-    
-    def add_unconnected_bone(self,  parent: Bones, head: Vec3, tail: Vec3) -> Bones:
-        new_bone = Bones(parent=parent, head=head, tail=tail, is_connected_to_parent=False)
+
+    def add_unconnected_bone(self, parent: Bones, head: Vec3, tail: Vec3) -> Bones:
+        new_bone = Bones(
+            parent=parent, head=head, tail=tail, is_connected_to_parent=False
+        )
         parent.child.append(new_bone)
         self.bones_list.append(new_bone)
         self.disconnected_chain_roots.append(new_bone)
         return new_bone
-    
+
     # DFS traversal function for linked list like armature structure
     def traverse_bones(self, bone: Bones, depth=0):
         bones_list: list[Bones] = []
