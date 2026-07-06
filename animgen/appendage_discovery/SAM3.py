@@ -1,7 +1,4 @@
 from transformers import Sam3Processor, Sam3Model
-import torch
-from PIL import Image
-import numpy as np
 from pathlib import Path
 
 from animgen.core.generated_asset_class import GeneratedAssetClass

@@ -1,15 +1,12 @@
 import os
 import platform as _platform
-from pathlib import Path
-
 if _platform.system() == "Linux":
     os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
     os.environ.setdefault(
         "EGL_DEVICE_ID", "-1"
     )  # NOTE: necessary to not create GPU contention
 
-### START VOODOO ###
-# Dark encantation for disabling anti-aliasing in pyrender (if needed)
+# for disabling anti-aliasing in pyrender (if needed)
 import OpenGL.GL
 
 antialias_active = False
@@ -25,8 +22,6 @@ def new_gl_enable(value):
 
 OpenGL.GL.glEnable = new_gl_enable
 import pyrender
-### END VOODOO ###
-
 import cv2
 import numpy as np
 import torch
@@ -37,12 +32,12 @@ import trimesh
 from tqdm import tqdm
 from typing import Any
 
-from animgen.core.generated_asset_class import GeneratedAssetClass
 from animgen.utils.camera import sample_view_matrices, sample_view_matrices_polyhedra
 from animgen.utils.math import range_norm
 from animgen.utils.mesh import duplicate_verts
-from animgen.renderer.shader_programs import *
+from animgen.renderer.shader_programs import NormalShaderCache, FaceidShaderCache, BarycentricShaderCache
 from animgen.core.types import PoseTransforms
+from pathlib import Path
 
 
 def colormap_faces(faces, background=np.array([255, 255, 255])) -> Image.Image:
@@ -87,20 +82,11 @@ class Renderer:
         }
 
     def set_object(
-        self, source: trimesh.Trimesh | GeneratedAssetClass | str | Path, smooth=False
+        self, source: trimesh.Trimesh | str | Path, smooth=False
     ):
         """ """
-        if isinstance(source, (str, Path, trimesh.Trimesh)):
-            source = GeneratedAssetClass(source)
-        if not isinstance(source, (trimesh.Trimesh, GeneratedAssetClass)):
-            raise ValueError(f"Invalid source type {type(source)}")
-
-        if isinstance(source, GeneratedAssetClass):
-            print(1)
-            self.tmesh = source.mesh
-        else:
-            print(2)
-            self.tmesh = source
+        source = load_model(source) if isinstance(source, (str, Path)) else source
+        self.tmesh = source
 
         assert isinstance(self.tmesh, trimesh.Trimesh), (
             f"Invalid mesh type {type(self.tmesh)}"

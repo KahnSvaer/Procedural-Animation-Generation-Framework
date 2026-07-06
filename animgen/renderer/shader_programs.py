@@ -1,8 +1,5 @@
 import os
-
-import numpy as np
 import pyrender
-from trimesh import Trimesh
 
 SHADERS_PATH = os.path.join(os.path.dirname(__file__), "shaders")
 
