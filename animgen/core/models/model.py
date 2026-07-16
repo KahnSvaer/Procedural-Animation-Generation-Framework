@@ -6,7 +6,7 @@ import trimesh
 from animgen.renderer.renderer import Renderer, render_multiview
 from animgen.io.model_io import load_model
 
-class GeneratedAssetClass:
+class BaseModelClass:
     def __init__(self, mesh: str | Path | trimesh.Trimesh):
         if not isinstance(mesh, trimesh.Trimesh):
             self.mesh: trimesh.Trimesh = load_model(mesh)
