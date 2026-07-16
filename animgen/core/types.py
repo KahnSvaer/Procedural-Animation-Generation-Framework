@@ -1,5 +1,6 @@
 import torch
+from jaxtyping import Float
 
 Vec3 = tuple[float, float, float]
-PoseTransforms = torch.Tensor
-Vec3Tensor = torch.Tensor  # Consider adding in torchtyping for better work
+PoseTransforms = Float[torch.Tensor, "4 4"]
+Vector3Tensor = Float[torch.Tensor, "3"]

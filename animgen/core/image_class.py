@@ -2,7 +2,7 @@ from PIL import Image
 from pathlib import Path
 from typing import cast
 
-import torch  # Allows rembg to use cuda libraries added with torch+cu124
+import torch  # Allows rembg to use cuda libraries added with torch+cu124  # noqa: F401
 import rembg
 
 
