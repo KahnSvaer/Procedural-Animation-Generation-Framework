@@ -2,7 +2,7 @@ import sys
 
 sys.path.append(".")
 
-from animgen.core.armature import Armature, Bones
+from animgen.core.armature import Armature, Bone
 
 import bpy
 
@@ -63,7 +63,7 @@ def create_blender_armature(armature_data):
 if __name__ == "__main__":
     clear_scene()
 
-    root = Bones(id="root", head=(0, 0, 0), tail=(0, 0, 1))
+    root = Bone(id="root", head=(0, 0, 0), tail=(0, 0, 1))
 
     armature = Armature(root)
 
