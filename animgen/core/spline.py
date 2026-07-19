@@ -11,8 +11,10 @@ and their parameterization:
 import torch
 import warnings
 
-from animgen.core.armature import Armature
+from animgen.core.armature import Armature, Bone
 from animgen.core.types import Vector3Tensor
+
+from animgen.utils.type import tensor_to_vec3
 
 
 class Spline:
@@ -33,7 +35,7 @@ class Spline:
             Number of phantom points to add at each end of the spline.
             Phantom points are extrapolated from the first and last points
             to ensure that the spline passes through the first and last points
-        
+
         phantom_acceleration_weight:
             Weighting factor for the acceleration term when generating phantom points.
             A higher value will result in phantom points that are more influenced by the acceleration
@@ -47,15 +49,15 @@ class Spline:
         phantom_num_points: int = 1,
         phantom_acceleration_weight: float = 1.0,
     ):
-        self.points = self._remove_consecutive_duplicates(points) # Remove consecutive duplicate points to avoid issues with spline generation
+        self.points = self._remove_consecutive_duplicates(
+            points
+        )  # Remove consecutive duplicate points to avoid issues with spline generation
         self.alpha = alpha
         self.phantom_num_points = phantom_num_points
         self.phantom_acceleration_weight = phantom_acceleration_weight
 
         if len(self.points) < 4:
-            raise ValueError(
-                "At least four points are required to create a spline."
-            )
+            raise ValueError("At least four points are required to create a spline.")
 
         if not 0.0 <= self.alpha <= 1.0:
             warnings.warn(
@@ -70,17 +72,14 @@ class Spline:
             )
 
         if not isinstance(self.phantom_num_points, int):
-            raise TypeError(
-                "Number of phantom points must be an integer."
-            )
+            raise TypeError("Number of phantom points must be an integer.")
 
         if self.phantom_num_points < 0:
-            raise ValueError(
-                "Number of phantom points must be non-negative."
-            )
+            raise ValueError("Number of phantom points must be non-negative.")
 
-        self.extended_points = self._add_phantom_points(self.phantom_num_points, self.phantom_acceleration_weight)
-    
+        self.extended_points = self._add_phantom_points(
+            self.phantom_num_points, self.phantom_acceleration_weight
+        )
 
     def _add_phantom_points(
         self,
@@ -99,19 +98,11 @@ class Spline:
 
         # Start boundary differences
         start_velocity = self.points[1] - self.points[0]
-        start_acceleration = (
-            self.points[2]
-            - 2 * self.points[1]
-            + self.points[0]
-        )
+        start_acceleration = self.points[2] - 2 * self.points[1] + self.points[0]
 
         # End boundary differences
         end_velocity = self.points[-1] - self.points[-2]
-        end_acceleration = (
-            self.points[-1]
-            - 2 * self.points[-2]
-            + self.points[-3]
-        )
+        end_acceleration = self.points[-1] - 2 * self.points[-2] + self.points[-3]
 
         start_points = [
             self.points[0]
@@ -128,7 +119,6 @@ class Spline:
         ]
 
         return start_points + self.points + end_points
-    
 
     def _remove_consecutive_duplicates(
         self,
@@ -156,15 +146,12 @@ class Spline:
         filtered_points = [points[0]]
 
         for point in points[1:]:
-            distance = torch.linalg.vector_norm(
-                point - filtered_points[-1]
-            )
+            distance = torch.linalg.vector_norm(point - filtered_points[-1])
 
             if distance > tolerance:
                 filtered_points.append(point)
 
         return filtered_points
-
 
     def _evaluate_segment(
         self,
@@ -195,7 +182,6 @@ class Spline:
             point_a: torch.Tensor,
             point_b: torch.Tensor,
         ) -> torch.Tensor:
-
             distance = torch.linalg.vector_norm(
                 point_b - point_a,
                 dim=-1,
@@ -233,39 +219,20 @@ class Spline:
         # individual parameter interval [t1, t2].
         t = t1 + t * (t2 - t1)
 
-        a1 = (
-            (t1 - t) / (t1 - t0) * p0
-            + (t - t0) / (t1 - t0) * p1
-        )
+        a1 = (t1 - t) / (t1 - t0) * p0 + (t - t0) / (t1 - t0) * p1
 
-        a2 = (
-            (t2 - t) / (t2 - t1) * p1
-            + (t - t1) / (t2 - t1) * p2
-        )
+        a2 = (t2 - t) / (t2 - t1) * p1 + (t - t1) / (t2 - t1) * p2
 
-        a3 = (
-            (t3 - t) / (t3 - t2) * p2
-            + (t - t2) / (t3 - t2) * p3
-        )
+        a3 = (t3 - t) / (t3 - t2) * p2 + (t - t2) / (t3 - t2) * p3
 
-        b1 = (
-            (t2 - t) / (t2 - t0) * a1
-            + (t - t0) / (t2 - t0) * a2
-        )
+        b1 = (t2 - t) / (t2 - t0) * a1 + (t - t0) / (t2 - t0) * a2
 
-        b2 = (
-            (t3 - t) / (t3 - t1) * a2
-            + (t - t1) / (t3 - t1) * a3
-        )
+        b2 = (t3 - t) / (t3 - t1) * a2 + (t - t1) / (t3 - t1) * a3
 
-        curve_points = (
-            (t2 - t) / (t2 - t1) * b1
-            + (t - t1) / (t2 - t1) * b2
-        )
+        curve_points = (t2 - t) / (t2 - t1) * b1 + (t - t1) / (t2 - t1) * b2
 
         return curve_points
-    
-    
+
     def evaluate_curve(self, num_points_per_segment: int = 100) -> list[Vector3Tensor]:
         """
         Evaluate the entire Catmull-Rom spline curve.
@@ -290,12 +257,145 @@ class Spline:
         )
 
         curve_points = self._evaluate_segment(p0, p1, p2, p3, t)
-    
+
         curve_points = curve_points.reshape(-1, 3)
 
-        curve_points = self._remove_consecutive_duplicates(
-            list(curve_points)
-        )
+        curve_points = self._remove_consecutive_duplicates(list(curve_points))
 
         return curve_points
 
+    # TODO: Add support for extra root bone generation for better armature manipulation.
+    def get_armature(
+        self,
+        num_bone: int,
+        add_extra_root: bool = False,
+        len_root: float = 0,
+    ) -> Armature:
+        """
+        Generate an armature from the evaluated spline curve.
+
+        Args:
+            num_bone:
+                Number of bones in the armature.
+
+            add_extra_root:
+                If True, an extra root bone is added to the armature.
+                This extra root bone is positioned at the start of the spline and extends in the opposite direction,
+                This should allow for finer movement of the armature when animating.
+
+            len_root:
+                Length of the root extension in the opposite direction of the spline.
+                Only used if add_extra_root is True. Must be non-negative.
+
+        Returns:
+            Armature containing bones distributed along the spline.
+        """
+
+        if num_bone <= 0:
+            raise ValueError("Number of bones must be greater than zero.")
+
+        if len_root < 0 and add_extra_root:
+            raise ValueError("Root bone length must be non-negative.")
+
+        curve_points = (
+            self.evaluate_curve()
+        )  # Keep phantom points for later root bone placement if needed
+        actual_curve_points = (
+            curve_points.copy()
+        )  # Without phantom points, for main bones placement
+
+        start_idx = next(
+            i
+            for i, point in enumerate(curve_points)
+            if torch.allclose(point, self.points[0])
+        )
+        end_idx = next(
+            i
+            for i, point in enumerate(curve_points)
+            if torch.allclose(point, self.points[-1])
+        )
+        actual_curve_points = actual_curve_points[start_idx : end_idx + 1]
+        points = torch.stack(actual_curve_points)
+
+        segment_lengths = torch.linalg.vector_norm(
+            points[1:] - points[:-1],
+            dim=-1,
+        )
+
+        # Build cumulative arc lengths:
+        #
+        # points:             P0    P1    P2    P3
+        # cumulative length: 0     L1    L2    L3
+        #
+        cumulative_lengths = torch.cat(
+            (
+                torch.zeros(
+                    1,
+                    device=points.device,
+                    dtype=points.dtype,
+                ),
+                torch.cumsum(segment_lengths, dim=0),
+            )
+        )
+
+        total_length = cumulative_lengths[-1].item()
+
+        if total_length <= 0:
+            raise ValueError("Spline must have a non-zero length.")
+
+        target_distances = torch.linspace(
+            0,
+            total_length,
+            num_bone + 1,
+            device=points.device,
+            dtype=points.dtype,
+        )
+
+        right_indices = torch.searchsorted(
+            cumulative_lengths,
+            target_distances,
+            right=True,
+        )
+
+        right_indices = torch.clamp(
+            right_indices,
+            min=1,
+            max=len(points) - 1,
+        )
+
+        left_indices = right_indices - 1
+
+        left_distances = cumulative_lengths[left_indices]
+        right_distances = cumulative_lengths[right_indices]
+
+        denominator = right_distances - left_distances
+
+        weights = torch.where(
+            denominator > 0,
+            (target_distances - left_distances) / denominator,
+            torch.zeros_like(denominator),
+        )
+
+        joint_positions = points[left_indices] + weights.unsqueeze(-1) * (
+            points[right_indices] - points[left_indices]
+        )
+
+        joint_positions[0] = points[0]
+        joint_positions[-1] = points[-1]
+
+        root_bone = Bone(
+            head=tensor_to_vec3(joint_positions[0]),
+            tail=tensor_to_vec3(joint_positions[1]),
+        )
+
+        armature = Armature(root_bone)
+
+        parent = root_bone
+
+        for joint_position in joint_positions[2:]:
+            parent = armature.add_connected_bone(
+                parent=parent,
+                tail=tensor_to_vec3(joint_position),
+            )
+
+        return armature

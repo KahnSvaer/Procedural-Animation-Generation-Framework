@@ -6,18 +6,13 @@ import matplotlib.pyplot as plt
 import torch
 
 from animgen.core.spline import Spline
-from animgen.core.armature import Armature
+
 
 points = [] # tensor([x, y, 0.0])
 curve_points = []
 
-armature: Armature | None = None
-spline: Spline | None = None
-
 spline_generated = False # UI Flag to allow for adding points before spline generation and locking editing after.
-armature_generated = False # UI Flag to allow for adding bones before armature generation and locking editing after.
 
-NUM_BONES = 10
 
 
 def redraw():
@@ -30,7 +25,6 @@ def redraw():
     ax.set_xlim(-10, 10)
     ax.set_ylim(-10, 10)
     ax.set_aspect("equal")
-    ax.set_aspect("equal")
     ax.grid(True)
 
     if not spline_generated:
@@ -41,16 +35,10 @@ def redraw():
             "Enter: Generate Spline"
         )
 
-    elif not armature_generated:
+    else:
         ax.set_title(
             "Spline Test — Spline Generated\n"
             "Point Editing Locked | "
-            "Enter: Generate Armature"
-        )
-
-    else:
-        ax.set_title(
-            "Spline Test — Armature Generated\n"
             "Enter: Reset"
         )
 
@@ -68,8 +56,6 @@ def redraw():
         ax.scatter(
             control_x,
             control_y,
-            s=80,
-            marker="x",
             label="Control Points",
         )
 
@@ -98,16 +84,6 @@ def redraw():
             label="Catmull-Rom Spline",
         )
 
-    if armature_generated:
-        assert armature is not None, "Armature should be generated before drawing."
-        for bone in armature.bones_list:
-            ax.plot(
-                [bone.head[0], bone.tail[0]],
-                [bone.head[1], bone.tail[1]],
-                linewidth=3,
-                marker="o",
-            )
-
     if points:
         ax.legend()
 
@@ -133,7 +109,7 @@ def onclick(event):
     if spline_generated:
         print(
             "Spline has already been generated. "
-            "Press Enter to continue."
+            "Press Enter to reset."
         )
         return
 
@@ -167,52 +143,30 @@ def onkey(event):
 
     Enter:
         Editing mode   -> Generate spline.
-        Spline mode    -> Generate armature.
-        Armature mode  -> Reset everything.
+        Generated mode -> Reset everything.
     """
 
     global spline_generated
-    global armature_generated
     global curve_points
-    global spline
-    global armature
 
     if event.key != "enter":
         return
 
-    if armature_generated:
+    if spline_generated:
         print("\nResetting spline test.")
 
         points.clear()
         curve_points.clear()
 
-        spline = None
-        armature = None
-
         spline_generated = False
-        armature_generated = False
 
         redraw()
 
         return
 
-    if spline_generated:
-        print("\nGenerating armature.")
-
-        assert spline is not None, "Spline should be generated before armature generation."
-        armature = spline.get_armature(
-            num_bone=NUM_BONES
-        )
-
-        armature_generated = True
-
-        redraw()
-
-        return
-
-    if len(points) < 4:
+    if len(points) < 3:
         print(
-            "\nAt least 4 control points are required "
+            "\nAt least 3 control points are required "
             "to generate the spline."
         )
         return
