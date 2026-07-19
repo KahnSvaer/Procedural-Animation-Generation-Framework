@@ -7,6 +7,11 @@ def generate_unique_id() -> str:
 
 
 class Bone:
+    """
+    Represents a single bone in an armature.
+    Each bone has a head and tail position in 3D space, a parent bone (if any), and a list of child bones.
+    """
+
     def __init__(
         self,
         id: str = "",
@@ -15,7 +20,6 @@ class Bone:
         tail: Vec3 = (0, 0, 0),
         is_connected_to_parent: bool = False,
     ):
-
         self.id = id
         if self.id == "":
             self.id = generate_unique_id()
@@ -39,13 +43,13 @@ class Armature:
     """
     Represents a hierarchical structure of bones (an armature).
     """
+
     def __init__(self, root_bone: Bone):
         self.root_bone: Bone = root_bone
         self.bones_list: list[Bone] = [root_bone]
         self.disconnected_chain_roots: list[Bone] = [
             self.root_bone
         ]  # List stores unconnected bones for traversal purposes
-
 
     def add_connected_bone(self, parent: Bone, tail: Vec3) -> Bone:
         """
@@ -58,7 +62,6 @@ class Armature:
         self.bones_list.append(new_bone)
         return new_bone
 
-
     def add_unconnected_bone(self, parent: Bone, head: Vec3, tail: Vec3) -> Bone:
         """
         Adds an unconnected bone to the armature.
@@ -70,7 +73,6 @@ class Armature:
         self.bones_list.append(new_bone)
         self.disconnected_chain_roots.append(new_bone)
         return new_bone
-    
 
     def add_chain(self, armature: "Armature", parent_bone: Bone):
         """
@@ -80,7 +82,6 @@ class Armature:
         armature.root_bone.parent = parent_bone
         self.bones_list.extend(armature.bones_list)
         self.disconnected_chain_roots.extend(armature.disconnected_chain_roots)
-    
 
     def add_root_bone(self, head: Vec3):
         """
@@ -97,7 +98,6 @@ class Armature:
         self.disconnected_chain_roots.remove(old_root)
         self.disconnected_chain_roots.append(new_root)
 
-    
     def validify_tree(self):
         """
         Validates the tree structure of the armature.
@@ -113,9 +113,10 @@ class Armature:
                 raise ValueError(
                     f"Bone {bone.id} has no parent but is not the root bone."
                 )
-        
+
         # Cycle detection using DFS
         visited = set()
+
         def dfs(bone: Bone):
             if bone in visited:
                 raise ValueError(f"Cycle detected at bone {bone.id}.")
@@ -123,5 +124,5 @@ class Armature:
             for child in bone.child:
                 dfs(child)
             visited.remove(bone)
+
         dfs(self.root_bone)
-        

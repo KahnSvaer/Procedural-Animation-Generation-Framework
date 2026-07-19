@@ -47,7 +47,14 @@ pytorch3d = [
 dev = [
     "beartype>=0.22.9",
     "ipykernel>=7.3.0",
+    "pre-commit>=4.6.0",
     "pytest>=9.1.1",
     "pyvista>=0.48.4",
     "ruff>=0.15.20",
+]
+
+[tool.ruff]
+exclude = [
+    "experiments/",
+    "demo",
 ]

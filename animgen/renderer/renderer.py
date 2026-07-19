@@ -1,5 +1,6 @@
 import os
 import platform as _platform
+
 if _platform.system() == "Linux":
     os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
     os.environ.setdefault(
@@ -21,6 +22,9 @@ def new_gl_enable(value):
 
 
 OpenGL.GL.glEnable = new_gl_enable
+
+# ruff: noqa: E402
+
 import pyrender
 import cv2
 import numpy as np
@@ -32,10 +36,15 @@ import trimesh
 from tqdm import tqdm
 from typing import Any
 
+from animgen.io.model_io import load_model
 from animgen.utils.camera import sample_view_matrices, sample_view_matrices_polyhedra
 from animgen.utils.math import range_norm
 from animgen.utils.mesh import duplicate_verts
-from animgen.renderer.shader_programs import NormalShaderCache, FaceidShaderCache, BarycentricShaderCache
+from animgen.renderer.shader_programs import (
+    NormalShaderCache,
+    FaceidShaderCache,
+    BarycentricShaderCache,
+)
 from animgen.core.types import PoseTransforms
 from pathlib import Path
 
@@ -81,9 +90,7 @@ class Renderer:
             "barycnt": BarycentricShaderCache(),
         }
 
-    def set_object(
-        self, source: trimesh.Trimesh | str | Path, smooth=False
-    ):
+    def set_object(self, source: trimesh.Trimesh | str | Path, smooth=False):
         """ """
         source = load_model(source) if isinstance(source, (str, Path)) else source
         self.tmesh = source
