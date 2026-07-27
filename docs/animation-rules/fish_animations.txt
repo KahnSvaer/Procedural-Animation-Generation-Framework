@@ -1,0 +1,212 @@
+================================================================================
+Rules for Fish Animation (Research Notes)
+================================================================================
+
+General Philosophy
+------------------
+The goal is not to perfectly reproduce biological swimming, but to generate
+plausible procedural animations using morphology-derived rules. Most rules
+should be inferred from the segmented mesh rather than hardcoded per species.
+
+
+================================================================================
+1. Pectoral (Side) Fins
+================================================================================
+
+Two broad functional classes appear to exist.
+
+Type A - Flexible Maneuvering Fins
+----------------------------------
+Examples:
+- Goldfish
+- Angelfish
+- Reef fish
+
+Characteristics:
+- High mobility.
+- Used for hovering, braking and turning.
+- Frequently perform rowing or figure-eight motions during slow swimming.
+- Fold close to the body during burst swimming.
+
+Animation Rules:
+- Large motion amplitude.
+- High flexibility.
+- Independent left/right motion.
+- Fold towards body as swimming speed increases.
+
+
+Type B - Hydrofoil Fins
+-----------------------
+Examples:
+- Sharks
+- Tuna
+- Dolphins
+- Whales
+
+Characteristics:
+- Considerably stiffer.
+- Primarily provide lift and directional control.
+- Smaller range of motion.
+- Behave similarly to hydrofoils.
+
+Animation Rules:
+- Small oscillation amplitude.
+- Mostly rigid rotation.
+- Motion follows body orientation.
+- Primarily change body orientation rather than generate thrust.
+
+Possible Detection:
+- Large span relative to body.
+- High aspect ratio.
+- Large horizontal extension from body.
+
+
+================================================================================
+2. Pelvic Fins
+================================================================================
+
+Current Idea:
+- Mostly passive.
+- Skinning may be sufficient.
+
+Possible Improvements:
+- Add slight delayed motion.
+- Add simple drag/inertia model.
+- Follow nearby body motion rather than being actively animated.
+
+
+================================================================================
+3. Dorsal and Anal Fins
+================================================================================
+
+Current Idea:
+- Mostly passive appendages.
+
+Possible Improvements:
+- Simulate inertial lag.
+- Small damped oscillations.
+- Limited deformation according to fin stiffness.
+
+Research Question:
+- Can fin stiffness be estimated from aspect ratio or thickness?
+
+
+================================================================================
+4. Tail
+================================================================================
+
+Primary source of propulsion.
+
+Two primary motion types:
+
+Horizontal Oscillation
+----------------------
+Examples:
+- Most fishes
+- Sharks
+- Goldfish
+- Tuna
+
+Body bends left-right.
+
+
+Vertical Oscillation
+--------------------
+Examples:
+- Whales
+- Dolphins
+
+Body bends up-down.
+
+Possible Detection:
+- Compare tail orientation with pectoral fin orientation.
+- Estimate dominant oscillation plane from morphology.
+
+Research Notes:
+- Additional horizontal bone chain may be useful for whale-like tails.
+- Investigate whether tail base width relative to tail span correlates with
+  stiffness or oscillation amplitude.
+
+
+================================================================================
+5. Body Motion
+================================================================================
+
+Body flexibility varies significantly.
+
+Possible categories:
+
+- Rigid
+- Semi-rigid
+- Flexible
+- Highly flexible
+
+Examples:
+- Tuna -> mostly rigid
+- Goldfish -> moderate flexibility
+- Eel -> highly flexible
+
+Animation Parameters:
+- Wave amplitude.
+- Wave frequency.
+- Wave propagation speed.
+- Wave damping.
+
+
+================================================================================
+6. General Morphological Properties
+================================================================================
+
+Each segmented part should ideally have procedural parameters.
+
+Possible parameters:
+
+- Stiffness
+- Root stiffness
+- Tip stiffness
+- Motion amplitude
+- Oscillation frequency
+- Motion plane
+- Rest pose
+- Passive / Active
+- Symmetry
+- Phase offset
+- Maximum bending angle
+- Inertial lag
+- Damping
+
+
+================================================================================
+7. Speed Dependent Behaviour
+================================================================================
+
+Low Speed
+---------
+- Larger pectoral fin movement.
+- Smaller body oscillation.
+- More steering corrections.
+
+Medium Speed
+------------
+- Moderate body wave.
+- Reduced pectoral motion.
+
+High Speed
+----------
+- Pectoral fins fold.
+- Larger tail oscillation.
+- Stronger body wave.
+- Reduced unnecessary appendage motion.
+
+
+================================================================================
+8. Future Research Questions
+================================================================================
+
+- Can fin stiffness be estimated directly from geometry?
+- Does fin aspect ratio predict flexibility?
+- Can tail shape predict swimming style?
+- Can body thickness predict wave propagation?
+- Can local PCA descriptors be used to estimate fin stiffness?
+- Can skeleton topology alone determine appropriate animation rules?
+- Which parameters can be inferred automatically from segmentation?
