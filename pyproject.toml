@@ -16,13 +16,15 @@ dependencies = [
     "torch==2.6.0",
     "torchvision==0.21.0",
     "transformers>=5.9.0",
-    "trimesh>=4.12.2",
+    "trimesh[easy]>=4.12.2",
     "pytorch3d==0.7.9",
     "bpy>=4.4.0",
     "open3d>=0.19.0",
     "pymeshlab>=2025.7.post1",
     "igraph>=1.0.0",
     "jaxtyping>=0.3.11",
+    "triangle>=20250106",
+    "scipy>=1.17.1",
 ]
 
 [tool.setuptools]
