@@ -140,7 +140,10 @@ class Renderer:
             raw_color, raw_depth = render_shader("default", self.scene)
         raw_norms, raw_depth = render_shader("normals", self.scene)
         raw_faces, raw_depth = render_shader("faceids", self.scene_faceid)
-        raw_bcent, raw_depth = render_shader("barycnt", self.scene_faceid)
+        if interpolate_norms:
+            raw_bcent, raw_depth = render_shader("barycnt", self.scene_faceid)
+        else:
+            raw_bcent = None
 
         def render_norms(norms):
             """ """
@@ -162,6 +165,8 @@ class Renderer:
 
         def render_bcent(bcent):
             """ """
+            if bcent is None:
+                return None
             return np.clip(bcent / 255.0, 0, 1)
 
         def render_matte(
@@ -177,11 +182,18 @@ class Renderer:
             """ """
             if interpolate_norms:  # NOTE requires process=True
                 verts_index = self.tmesh.faces[faces.reshape(-1)]  # (n, 3)
-                verts_norms = self.tmesh.vertex_normals[verts_index]  # (n, 3, 3)
-                norms = np.sum(verts_norms * bcent.reshape(-1, 3, 1), axis=1)
+                v0_norm = self.tmesh.vertex_normals[verts_index[:, 0]]
+                v1_norm = self.tmesh.vertex_normals[verts_index[:, 1]]
+                v2_norm = self.tmesh.vertex_normals[verts_index[:, 2]]
+                bcent_flat = bcent.reshape(-1, 3)
+                norms = (
+                    v0_norm * bcent_flat[:, 0:1]
+                    + v1_norm * bcent_flat[:, 1:2]
+                    + v2_norm * bcent_flat[:, 2:3]
+                )
                 norms = norms.reshape(bcent.shape)
 
-            diffuse = np.sum(norms * lightdir, axis=2)
+            diffuse = norms @ lightdir
             diffuse = np.clip(diffuse, -1, 1)
             matte = 255 * (diffuse[:, :, None] * alpha + beta)
             matte = np.where(depth[:, :, None] > 0, matte, 255)
