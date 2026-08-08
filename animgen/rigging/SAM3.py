@@ -1,7 +1,7 @@
 from transformers import Sam3Processor, Sam3Model
 from pathlib import Path
 
-from animgen.core.generated_asset_class import GeneratedAssetClass
+from animgen.core.models.model import BaseModelClass
 import trimesh
 
 from dotenv import load_dotenv
@@ -30,12 +30,11 @@ class SAM3_apendage_finding:
 
     def __call__(
         self,
-        mesh: GeneratedAssetClass | str | Path | trimesh.Trimesh,
+        mesh: BaseModelClass | str | Path | trimesh.Trimesh,
         text_inputs: list[str] | None = None,
     ):
-
-        if not isinstance(mesh, GeneratedAssetClass):
-            mesh = GeneratedAssetClass(mesh)
+        if not isinstance(mesh, BaseModelClass):
+            mesh = BaseModelClass(mesh)
         if text_inputs is None and self.text_embeddings is None:
             raise ValueError(
                 "Add text prompts either to the class or inside the __call__ function"

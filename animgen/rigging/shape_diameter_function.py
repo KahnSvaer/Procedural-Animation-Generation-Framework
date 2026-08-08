@@ -256,7 +256,6 @@ def partition2label(mesh: Trimesh, partition):
     for face1, face2 in edges:
         graph[face1].add(face2)
         graph[face2].add(face1)
-    labels = set(list(np.unique(partition)))
 
     components = []
     visited = set()
