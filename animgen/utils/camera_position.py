@@ -12,92 +12,107 @@ def _golden_ratio():
     return (1 + np.sqrt(5)) / 2
 
 
+def _normalize(arr):
+    norms = np.linalg.norm(arr, axis=1, keepdims=True)
+    return arr / np.where(norms > 1e-12, norms, 1.0)
+
+
 def pos_tetrahedron():
-    return np.array(
-        [
-            [1, 1, 1],
-            [-1, -1, 1],
-            [-1, 1, -1],
-            [1, -1, -1],
-        ]
+    return _normalize(
+        np.array(
+            [
+                [1, 1, 1],
+                [-1, -1, 1],
+                [-1, 1, -1],
+                [1, -1, -1],
+            ]
+        )
     )
 
 
 def pos_octahedron():
-    return np.array(
-        [
-            [1, 0, 0],
-            [0, 0, 1],
-            [-1, 0, 0],
-            [0, 0, -1],
-            [0, 1, 0],
-            [0, -1, 0],
-        ]
+    return _normalize(
+        np.array(
+            [
+                [1, 0, 0],
+                [0, 0, 1],
+                [-1, 0, 0],
+                [0, 0, -1],
+                [0, 1, 0],
+                [0, -1, 0],
+            ]
+        )
     )
 
 
 def pos_cube():
-    return np.array(
-        [
-            [1, 1, 1],
-            [-1, 1, 1],
-            [-1, -1, 1],
-            [1, -1, 1],
-            [1, 1, -1],
-            [-1, 1, -1],
-            [-1, -1, -1],
-            [1, -1, -1],
-        ]
+    return _normalize(
+        np.array(
+            [
+                [1, 1, 1],
+                [-1, 1, 1],
+                [-1, -1, 1],
+                [1, -1, 1],
+                [1, 1, -1],
+                [-1, 1, -1],
+                [-1, -1, -1],
+                [1, -1, -1],
+            ]
+        )
     )
 
 
 def pos_icosahedron():
     phi = _golden_ratio()
-    return np.array(
-        [
-            [-1, phi, 0],
-            [-1, -phi, 0],
-            [1, phi, 0],
-            [1, -phi, 0],
-            [0, -1, phi],
-            [0, 1, phi],
-            [0, -1, -phi],
-            [0, 1, -phi],
-            [phi, 0, -1],
-            [phi, 0, 1],
-            [-phi, 0, -1],
-            [-phi, 0, 1],
-        ]
-    ) / np.sqrt(1 + phi**2)
+    return _normalize(
+        np.array(
+            [
+                [-1, phi, 0],
+                [-1, -phi, 0],
+                [1, phi, 0],
+                [1, -phi, 0],
+                [0, -1, phi],
+                [0, 1, phi],
+                [0, -1, -phi],
+                [0, 1, -phi],
+                [phi, 0, -1],
+                [phi, 0, 1],
+                [-phi, 0, -1],
+                [-phi, 0, 1],
+            ]
+        )
+    )
 
 
 def pos_dodecahedron():
     phi = _golden_ratio()
     a, b = 1 / phi, 1 / (phi * phi)
-    return np.array(
-        [
-            [-a, -a, b],
-            [a, -a, b],
-            [a, a, b],
-            [-a, a, b],
-            [-a, -a, -b],
-            [a, -a, -b],
-            [a, a, -b],
-            [-a, a, -b],
-            [b, -a, -a],
-            [b, a, -a],
-            [b, a, a],
-            [b, -a, a],
-            [-b, -a, -a],
-            [-b, a, -a],
-            [-b, a, a],
-            [-b, -a, a],
-            [-a, b, -a],
-            [a, b, -a],
-            [a, b, a],
-            [-a, b, a],
-        ]
-    ) / np.sqrt(a**2 + b**2)
+    return _normalize(
+        np.array(
+            [
+                [-a, -a, b],
+                [a, -a, b],
+                [a, a, b],
+                [-a, a, b],
+                [-a, -a, -b],
+                [a, -a, -b],
+                [a, a, -b],
+                [-a, a, -b],
+                [b, -a, -a],
+                [b, a, -a],
+                [b, a, a],
+                [b, -a, a],
+                [-b, -a, -a],
+                [-b, a, -a],
+                [-b, a, a],
+                [-b, -a, a],
+                [-a, b, -a],
+                [a, b, -a],
+                [a, b, a],
+                [-a, b, a],
+            ]
+        )
+    )
 
 
 def pos_ring(n=8, elevation=15):
