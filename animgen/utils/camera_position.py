@@ -1,7 +1,7 @@
 """
 Camera Position Generators to experiment with SAM mesh segmentation later to choose which works better overall
 
-Reference: https://github.com/gtangg12/samesh/blob/main/src/samesh/utils/polyhedra.py
+Reference: https://github.com/gtangg12/samesh/
 """
 
 import numpy as np

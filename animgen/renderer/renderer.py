@@ -1,3 +1,12 @@
+"""
+Rendering module for animgen. Provides a Renderer class that wraps pyrender and
+utilities for rendering multiple views of a 3D mesh. The module supports rendering
+of normals, depth maps, face IDs, and barycentric coordinates, as well as generating
+camera poses based on random sampling or polyhedral sampling strategies.
+
+Reference: https://github.com/gtangg12/samesh
+"""
+
 import os
 import platform as _platform
 

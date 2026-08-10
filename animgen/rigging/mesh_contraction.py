@@ -1,3 +1,30 @@
+"""
+Mesh contraction and skeleton extraction code adapted from Au et al. (2008),
+"Skeleton Extraction by Mesh Contraction" (ACM TOG 27(3):44).
+
+This implementation is a Python adaptation of the original C++ code, with
+modifications for clarity and integration.
+
+Reference: @article{
+        10.1145/1360612.1360643,
+        author = {Au, Oscar Kin-Chung and Tai, Chiew-Lan and Chu, Hung-Kuo and Cohen-Or, Daniel and Lee, Tong-Yee},
+        title = {Skeleton extraction by mesh contraction},
+        year = {2008},
+        issue_date = {August 2008},
+        publisher = {Association for Computing Machinery},
+        address = {New York, NY, USA},
+        volume = {27},
+        number = {3},
+        issn = {0730-0301},
+        url = {https://doi.org/10.1145/1360612.1360643},
+        journal = {ACM Trans. Graph.},
+        month = aug,
+        pages = {1–10},
+        numpages = {10},
+        keywords = {smoothing, skinning, skeleton, segmentation, mesh contraction, Laplacian}
+    }
+"""
+
 import trimesh
 import numpy as np
 from scipy.sparse import coo_matrix, diags
@@ -579,127 +606,3 @@ def extract_skeleton(
         return skeleton_vertices, skeleton_edges
 
     return trimesh.load_path(skeleton_vertices[skeleton_edges])
-
-
-def subdivide_and_center_skeleton(
-    mesh_vertices, skeleton_vertices, skeleton_edges, max_edge_len=0.03
-):
-    """
-    Subdivides long edges in the skeleton graph using a greedy midpoint insertion
-    strategy, fixing and centering each new midpoint to the true geometric centroid
-    of the local mesh cross-section slice.
-
-    Parameters
-    ----------
-    mesh_vertices : (N, 3) ndarray
-        Original 3D mesh surface vertices.
-    skeleton_vertices : (M, 3) ndarray
-        Extracted skeleton node positions.
-    skeleton_edges : (K, 2) ndarray
-        Indices of connected skeleton edges.
-    max_edge_len : float
-        Maximum allowed edge length before subdividing.
-
-    Returns
-    -------
-    subdivided_vertices : (P, 3) ndarray
-        Dense skeleton vertices guaranteed to lie inside the mesh volume.
-    subdivided_edges : (Q, 2) ndarray
-        Subdivided edge connectivity graph.
-    """
-    curr_v = list(skeleton_vertices)
-    curr_e = [list(e) for e in skeleton_edges]
-
-    changed = True
-    while changed:
-        changed = False
-        new_e = []
-        for u_idx, v_idx in curr_e:
-            p_u = np.array(curr_v[u_idx])
-            p_v = np.array(curr_v[v_idx])
-            edge_vec = p_v - p_u
-            length = np.linalg.norm(edge_vec)
-
-            if length > max_edge_len:
-                # Subdivide by inserting a centered midpoint
-                mid_initial = (p_u + p_v) / 2.0
-                dir_vec = edge_vec / (length + 1e-12)
-
-                # Find original mesh surface points near the perpendicular slice at mid_initial
-                disp_to_mid = mesh_vertices - mid_initial
-                proj_along_dir = np.abs(np.dot(disp_to_mid, dir_vec))
-                dist_to_mid = np.linalg.norm(disp_to_mid, axis=1)
-
-                # Select vertices close to the slice plane
-                slice_mask = (proj_along_dir < max_edge_len * 0.5) & (
-                    dist_to_mid < max_edge_len * 3.0
-                )
-                if np.sum(slice_mask) >= 3:
-                    # Centroid of local cross-section slice
-                    mid_centered = np.mean(mesh_vertices[slice_mask], axis=0)
-                else:
-                    mid_centered = mid_initial
-
-                new_idx = len(curr_v)
-                curr_v.append(mid_centered)
-
-                # Split edge (u, v) into (u, new) and (new, v)
-                new_e.append([u_idx, new_idx])
-                new_e.append([new_idx, v_idx])
-                changed = True
-            else:
-                new_e.append([u_idx, v_idx])
-        curr_e = new_e
-
-    return np.array(curr_v, dtype=np.float64), np.array(curr_e, dtype=np.int64)
-
-
-def interpolate_skeleton_curve(skeleton, num_points=100):
-    """
-    Legacy wrapper function for skeleton curve interpolation using linear path resampling.
-    """
-    vertices = skeleton.vertices
-    edges = []
-    for entity in skeleton.entities:
-        if hasattr(entity, "nodes"):
-            nodes = entity.nodes
-            if len(nodes.shape) == 2:
-                for u, v in nodes:
-                    edges.append((int(u), int(v)))
-            else:
-                for idx in range(len(nodes) - 1):
-                    edges.append((int(nodes[idx]), int(nodes[idx + 1])))
-
-    if not edges:
-        return vertices
-
-    # Build adjacency
-    adj = {i: [] for i in range(len(vertices))}
-    for u, v in edges:
-        adj[u].append(v)
-        adj[v].append(u)
-
-    # Find endpoints
-    endpoints = [i for i, neighbors in adj.items() if len(neighbors) == 1]
-    if len(endpoints) < 2:
-        return vertices
-
-    start_node = endpoints[0]
-    visited = {start_node}
-    path = [start_node]
-    curr = start_node
-    while True:
-        next_nodes = [n for n in adj[curr] if n not in visited]
-        if not next_nodes:
-            break
-        curr = next_nodes[0]
-        visited.add(curr)
-        path.append(curr)
-
-    pts = vertices[path]
-    u_old = np.linspace(0, 1, len(pts))
-    u_new = np.linspace(0, 1, num_points)
-    from scipy.interpolate import interp1d
-
-    f = interp1d(u_old, pts, axis=0, kind="linear")
-    return f(u_new)
