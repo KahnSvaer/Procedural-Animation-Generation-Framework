@@ -1,11 +1,10 @@
 import numpy as np
 import trimesh
 import torch
-import bpy
-import mathutils
 from typing import Union, List, Any
 
 from animgen.core.spline import Spline
+from animgen.utils.math import rotation_matrix_from_vectors
 
 
 def build_bishop_frame(
@@ -190,6 +189,17 @@ def deform_mesh_to_spine_bpy(
     """
     Deform a mesh using Blender's Armature modifier (Linear Blend Skinning / LBS) via bpy.
     """
+    try:
+        import bpy
+
+        # pyrefly: ignore [missing-import] # This is prepackaged with blender bpy module and autoimportable once bpy is imported
+        import mathutils
+    except ImportError as e:
+        raise ImportError(
+            "Blender ('bpy') and 'mathutils' modules are required to use the BPY backend. "
+            "Please run this code inside Blender's python environment."
+        ) from e
+
     N_points = len(source_spine)
     if N_points < 2:
         raise ValueError("Spine must have at least 2 points to define segments.")
@@ -275,16 +285,18 @@ def deform_mesh_to_spine_bpy(
         for i in range(N_points - 1):
             pb = arm_obj.pose.bones[f"Bone_{i}"]
 
-            T_src_vec = mathutils.Vector(source_spine[i + 1] - source_spine[i])
-            T_tgt_vec = mathutils.Vector(target_spine[i + 1] - target_spine[i])
-            q = T_src_vec.rotation_difference(T_tgt_vec)
+            T_src = source_spine[i + 1] - source_spine[i]
+            T_tgt = target_spine[i + 1] - target_spine[i]
+            R_diff = rotation_matrix_from_vectors(T_src, T_tgt)
 
-            M_bind = pb.bone.matrix_local
-            R_bind = M_bind.to_3x3()
-            R_pose = q.to_matrix() @ R_bind
+            M_bind = np.array(pb.bone.matrix_local)
+            R_bind = M_bind[:3, :3]
+            R_pose = R_diff @ R_bind
 
-            M = mathutils.Matrix.Translation(target_spine[i]) @ R_pose.to_4x4()
-            pb.matrix = M
+            M = np.eye(4)
+            M[:3, :3] = R_pose
+            M[:3, 3] = target_spine[i]
+            pb.matrix = mathutils.Matrix(M.tolist())
 
         bpy.ops.object.mode_set(mode="OBJECT")
 
