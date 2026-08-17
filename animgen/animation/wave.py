@@ -233,20 +233,33 @@ def _travelling_wave_generator(
     time_stamps = np.asarray(time_stamps, dtype=np.float64)
 
     total_length = distances[-1]
+    num_bones = len(distances) - 1
+
+    bone_length = total_length / num_bones
+
+    if num_waves <= 0.0:
+        ceil_waves = 1.0
+        ceil_length_target = total_length
+        ceil_num_bones = num_bones
+    else:
+        ceil_waves = float(np.ceil(num_waves))
+        ceil_length_target = total_length * (ceil_waves / num_waves)
+        ceil_num_bones = int(np.ceil(ceil_length_target / bone_length))
+
+    # Extend distances by appending segments of the same bone_length
+    ceil_distances = np.arange(ceil_num_bones + 1) * bone_length
 
     wave_number = 2 * np.pi * num_waves / total_length
     angular_frequency = 2 * np.pi / wave_duration
 
-    spatial_amplitude = wave_amplitude * np.exp(growth_factor * distances)
+    spatial_amplitude = wave_amplitude * np.exp(growth_factor * ceil_distances)
 
     phase = (
-        wave_number * distances
+        wave_number * ceil_distances
         - angular_frequency * time_stamps[..., None]
         + phi_s
         + phi_t
     )
-
-    displacement = spatial_amplitude * np.sin(phase)
 
     # Spatial derivative of the wave.
     spatial_derivative = spatial_amplitude * (
@@ -271,21 +284,19 @@ def _travelling_wave_generator(
 
     if time_stamps.ndim == 0:
         tangent = tangent[None, ...]
-        displacement = displacement[None, ...]
 
     animation: Animation = {}
 
-    for time, frame_tangent, frame_displacement in zip(
+    for time, frame_tangent in zip(
         np.atleast_1d(time_stamps),
         tangent,
-        displacement,
     ):
         frame: AnimationFrame = [
-            (0.0, frame_displacement[0], 0.0),
+            (0.0, 0.0, 0.0),
         ]
 
-        for index in range(1, len(distances)):
-            bone_length = distances[index] - distances[index - 1]
+        for index in range(1, len(ceil_distances)):
+            seg_length = ceil_distances[index] - ceil_distances[index - 1]
 
             previous_position = np.asarray(
                 frame[-1],
@@ -294,11 +305,16 @@ def _travelling_wave_generator(
 
             direction = frame_tangent[index - 1]
 
-            position = previous_position + bone_length * direction
+            position = previous_position + seg_length * direction
 
             frame.append(tuple(position.tolist()))
 
-        animation[float(time)] = frame
+        y_coords = np.array([p[1] for p in frame])
+        mean_y_ceil = np.mean(y_coords)
+        shifted_frame = [(p[0], p[1] - mean_y_ceil, p[2]) for p in frame]
+        truncated_frame = shifted_frame[: len(distances)]
+
+        animation[float(time)] = truncated_frame
 
     return animation
 
