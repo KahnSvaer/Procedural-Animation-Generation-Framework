@@ -64,7 +64,7 @@ exclude = [
 ]
 
 [tool.pyright]
-include = ["animgen"]
+include = ["animgen", "tests"]
 exclude = [
     "**/node_modules",
     "**/__pycache__",
