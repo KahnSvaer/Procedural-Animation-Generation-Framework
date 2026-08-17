@@ -16,7 +16,6 @@ class AnimationCallback(Protocol):
         armature: Armature,
         list_bones: list[int],
         *args: Any,
-        **kwargs: Any,
     ) -> Any: ...
 
     def __class_getitem__(cls, params: Any) -> Any:
@@ -44,7 +43,13 @@ class AnimationClip:
 
     def add_animation_movements(
         self,
-    ):
+        callback: AnimationCallback,
+        list_bones: list[int],
+        *args: Any,
+    ) -> None:
+        """
+        Adds animation movement
+        """
         pass
 
     def check_loopable(
