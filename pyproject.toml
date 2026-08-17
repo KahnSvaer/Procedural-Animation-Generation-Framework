@@ -53,6 +53,7 @@ dev = [
     "pre-commit>=4.6.0",
     "pyright>=1.1.411",
     "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
     "pyvista>=0.48.4",
     "ruff>=0.15.20",
 ]
