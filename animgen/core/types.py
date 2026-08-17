@@ -6,3 +6,4 @@ PoseTransforms = Float[torch.Tensor, "4 4"]
 Vector3Tensor = Float[torch.Tensor, "3"]
 AnimationFrame = list[Vec3]
 TimeSeconds = float
+Animation = dict[TimeSeconds, AnimationFrame]

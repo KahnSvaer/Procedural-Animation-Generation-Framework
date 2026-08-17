@@ -12,6 +12,8 @@ import numpy as np
 from animgen.core.armature import Armature
 
 from numpy.typing import NDArray
+from typing import Literal
+from animgen.core.types import AnimationFrame, Animation
 
 
 def _check_armature_chain(armature: Armature, index_bones: list[int]) -> bool:
@@ -140,7 +142,168 @@ def _standing_wave_calculator(
     return temporal_part[:, None] * spatial_part[None, :]
 
 
-def standing_wave_generator(
+def _travelling_wave_generator(
+    distances: list[float] | NDArray[np.float64],
+    wave_amplitude: float,
+    wave_duration: float,
+    time_stamps: float | list[float] | NDArray[np.float64],
+    growth_factor: float = 0,
+    num_waves: float = 2.6,
+    phi_s: float = 0.0,
+    phi_t: float = 0.0,
+) -> Animation:
+    """
+    Generate a travelling-wave animation from spatial distances and timestamps.
+
+    The travelling wave is modeled as:
+
+        u(s, t) = A exp(g s)
+                sin(k s - omega t + phi_s + phi_t)
+
+    where the spatial wave number ``k`` and temporal angular frequency
+    ``omega`` are defined as:
+
+        k = 2 pi N / L
+
+        omega = 2 pi / T
+
+    Here, ``N`` is the number of spatial waves, ``L`` is the total
+    spatial length, and ``T`` is the temporal period of the wave.
+
+    The resulting displacement is applied along the y-axis to a chain whose
+    rest configuration lies along the x-axis. Consequently, each generated
+    frame contains the 3D positions of the chain at a given timestamp.
+
+    Parameters
+    ----------
+    distances : list[float] | NDArray[np.float64]
+        Cumulative spatial distances ``s`` at which to evaluate the wave.
+        The distances are measured from the root of the armature and define
+        the x-coordinate of each point in the generated chain.
+
+    wave_amplitude : float
+        Base amplitude ``A`` of the wave at ``s = 0``.
+
+    wave_duration : float
+        Temporal period ``T`` of the wave in seconds. The wave completes
+        one full temporal oscillation every ``wave_duration`` seconds.
+
+    time_stamps : float | list[float] | NDArray[np.float64]
+        Timestamp or timestamps ``t`` at which to evaluate the wave,
+        in seconds.
+
+    growth_factor : float, default=0.0
+        Exponential spatial growth rate ``g`` of the wave amplitude.
+
+        The amplitude at distance ``s`` is:
+
+            A(s) = A * exp(g * s)
+
+        Positive values increase the amplitude with distance, zero
+        produces a constant amplitude, and negative values produce
+        exponential damping.
+
+    num_waves : float, default=2.6
+        Number of complete spatial wavelengths across the total spatial
+        length ``L``.
+
+    phi_s : float, default=0.0
+        Spatial phase offset in radians.
+
+    phi_t : float, default=0.0
+        Temporal phase offset in radians.
+
+    Returns
+    -------
+    Animation
+        Mapping from timestamps to animation frames.
+
+        Each timestamp maps to an ``AnimationFrame`` containing one
+        ``(x, y, z)`` position for every spatial distance.
+
+        For each distance ``s``, the generated position is:
+
+            (s, u(s, t), 0)
+
+        Thus, the returned animation has one frame per timestamp, with
+        each frame containing the 3D positions of the entire chain.
+    """
+
+    distances = np.asarray(distances, dtype=np.float64)
+    time_stamps = np.asarray(time_stamps, dtype=np.float64)
+
+    total_length = distances[-1]
+
+    wave_number = 2 * np.pi * num_waves / total_length
+    angular_frequency = 2 * np.pi / wave_duration
+
+    spatial_amplitude = wave_amplitude * np.exp(growth_factor * distances)
+
+    phase = (
+        wave_number * distances
+        - angular_frequency * time_stamps[..., None]
+        + phi_s
+        + phi_t
+    )
+
+    displacement = spatial_amplitude * np.sin(phase)
+
+    # Spatial derivative of the wave.
+    spatial_derivative = spatial_amplitude * (
+        growth_factor * np.sin(phase) + wave_number * np.cos(phase)
+    )
+
+    # Tangent of the desired curve.
+    tangent = np.stack(
+        (
+            np.ones_like(spatial_derivative),
+            spatial_derivative,
+            np.zeros_like(spatial_derivative),
+        ),
+        axis=-1,
+    )
+
+    tangent /= np.linalg.norm(
+        tangent,
+        axis=-1,
+        keepdims=True,
+    )
+
+    if time_stamps.ndim == 0:
+        tangent = tangent[None, ...]
+        displacement = displacement[None, ...]
+
+    animation: Animation = {}
+
+    for time, frame_tangent, frame_displacement in zip(
+        np.atleast_1d(time_stamps),
+        tangent,
+        displacement,
+    ):
+        frame: AnimationFrame = [
+            (0.0, frame_displacement[0], 0.0),
+        ]
+
+        for index in range(1, len(distances)):
+            bone_length = distances[index] - distances[index - 1]
+
+            previous_position = np.asarray(
+                frame[-1],
+                dtype=np.float64,
+            )
+
+            direction = frame_tangent[index - 1]
+
+            position = previous_position + bone_length * direction
+
+            frame.append(tuple(position.tolist()))
+
+        animation[float(time)] = frame
+
+    return animation
+
+
+def chain_wave_generator(
     armature: Armature,
     index_bones: list[int],
     wave_amplitude: float,
@@ -151,7 +314,8 @@ def standing_wave_generator(
     phi_s: float = 0.0,
     phi_t: float = 0.0,
     axis=2,
-):
+    wave: Literal["standing", "travel"] = "standing",
+) -> Animation:
     """
     Generate a sequence of armature positions representing a standing wave.
 

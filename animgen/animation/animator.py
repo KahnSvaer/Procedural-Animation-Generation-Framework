@@ -1,25 +1,10 @@
-from typing import Any, Callable, Protocol
+from typing import Any, Callable
 
 from animgen.core.armature import Armature
-from animgen.core.types import AnimationFrame, TimeSeconds
+from animgen.core.types import AnimationFrame, TimeSeconds, Animation
 
 
-class AnimationCallback(Protocol):
-    """
-    A Protocol that allows arbitrary typing subscription at runtime, e.g.,
-    `AnimationCallback[Armature, list[int], ...]`
-    which resolves to `Callable[..., Any]` for type checkers and at runtime.
-    """
-
-    def __call__(
-        self,
-        armature: Armature,
-        list_bones: list[int],
-        *args: Any,
-    ) -> Any: ...
-
-    def __class_getitem__(cls, params: Any) -> Any:
-        return Callable[..., Any]
+AnimationCallback = Callable[..., tuple[list[int], Animation]]
 
 
 class AnimationClip:
