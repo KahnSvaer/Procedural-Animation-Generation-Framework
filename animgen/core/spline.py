@@ -264,7 +264,6 @@ class Spline:
 
         return curve_points
 
-    # TODO: Add support for extra root bone generation for better armature manipulation.
     def get_armature(
         self,
         num_bone: int,
@@ -397,5 +396,34 @@ class Spline:
                 parent=parent,
                 tail=tensor_to_vec3(joint_position),
             )
+
+        if add_extra_root:
+            if self.phantom_num_points > 0:
+                phantom_pt = self.extended_points[self.phantom_num_points - 1]
+                if len_root > 0:
+                    dir = phantom_pt - self.points[0]
+                    dir = dir / torch.linalg.vector_norm(dir)
+                    head = self.points[0] + len_root * dir
+                else:
+                    head = phantom_pt
+            else:
+                start_velocity = self.points[1] - self.points[0]
+                start_acceleration = (
+                    self.points[2] - 2 * self.points[1] + self.points[0]
+                )
+
+                out_offset = (
+                    -1.0 * start_velocity
+                    + self.phantom_acceleration_weight * start_acceleration
+                )
+                out_offset_norm = torch.linalg.vector_norm(out_offset)
+
+                actual_len_root = (
+                    len_root if len_root > 0 else float(out_offset_norm.item())
+                )
+                dir = out_offset / out_offset_norm
+                head = self.points[0] + actual_len_root * dir
+
+            armature.add_root_bone(tensor_to_vec3(head))
 
         return armature
