@@ -1,5 +1,11 @@
 import numpy as np
-from animgen.animation.wave import _travelling_wave_generator
+import pytest
+from animgen.animation.wave import (
+    _travelling_wave_generator,
+    _standing_wave_generator,
+    chain_wave_generator,
+)
+from animgen.core.armature import Armature, Bone
 
 
 def reconstruct_positions(distances, rotations):
@@ -26,14 +32,18 @@ def reconstruct_positions(distances, rotations):
     return positions
 
 
-def test_bone_length_conservation():
+@pytest.mark.parametrize(
+    "wave_generator",
+    [_travelling_wave_generator, _standing_wave_generator],
+)
+def test_bone_length_conservation(wave_generator):
     """Verify that bone lengths are perfectly conserved (rigid bones) across all frames."""
     distances = np.linspace(0.0, 5.0, 11)  # 10 segments of length 0.5 each
     wave_amplitude = 0.4
     wave_duration = 2.0
     time_stamps = [0.0, 0.5, 1.0, 1.5, 2.0]
 
-    animation = _travelling_wave_generator(
+    animation = wave_generator(
         distances=distances,
         wave_amplitude=wave_amplitude,
         wave_duration=wave_duration,
@@ -57,15 +67,19 @@ def test_bone_length_conservation():
         np.testing.assert_allclose(actual_lengths, expected_lengths, atol=1e-12)
 
 
-def test_travelling_wave_periodicity():
-    """Verify that the traveling wave is periodic over one wave duration (loopability)."""
+@pytest.mark.parametrize(
+    "wave_generator",
+    [_travelling_wave_generator, _standing_wave_generator],
+)
+def test_wave_periodicity(wave_generator):
+    """Verify that the wave is periodic over one wave duration (loopability)."""
     distances = np.linspace(0.0, 5.0, 20)
     wave_amplitude = 0.4
     wave_duration = 2.0
     t1 = 0.3
     t2 = t1 + wave_duration
 
-    animation = _travelling_wave_generator(
+    animation = wave_generator(
         distances=distances,
         wave_amplitude=wave_amplitude,
         wave_duration=wave_duration,
@@ -82,7 +96,11 @@ def test_travelling_wave_periodicity():
     np.testing.assert_allclose(frame1, frame2, atol=1e-12)
 
 
-def test_travelling_wave_spatial_growth():
+@pytest.mark.parametrize(
+    "wave_generator",
+    [_travelling_wave_generator, _standing_wave_generator],
+)
+def test_wave_spatial_growth(wave_generator):
     """Verify that spatial growth factor properly scales the wave amplitude along the armature."""
     distances = np.linspace(0.0, 5.0, 20)
     wave_amplitude = 0.4
@@ -90,7 +108,7 @@ def test_travelling_wave_spatial_growth():
     time_stamps = np.linspace(0.0, 2.0, 20)
 
     # 1. No growth (growth_factor = 0.0)
-    anim_no_growth = _travelling_wave_generator(
+    anim_no_growth = wave_generator(
         distances=distances,
         wave_amplitude=wave_amplitude,
         wave_duration=wave_duration,
@@ -100,7 +118,7 @@ def test_travelling_wave_spatial_growth():
     )
 
     # 2. Positive growth (growth_factor = 0.2)
-    anim_growth = _travelling_wave_generator(
+    anim_growth = wave_generator(
         distances=distances,
         wave_amplitude=wave_amplitude,
         wave_duration=wave_duration,
@@ -126,14 +144,18 @@ def test_travelling_wave_spatial_growth():
     assert max_y_growth > max_y_no_growth
 
 
-def test_travelling_wave_single_timestamp():
+@pytest.mark.parametrize(
+    "wave_generator",
+    [_travelling_wave_generator, _standing_wave_generator],
+)
+def test_wave_single_timestamp(wave_generator):
     """Verify that passing a single timestamp works correctly and returns one frame."""
     distances = np.linspace(0.0, 5.0, 11)
     wave_amplitude = 0.4
     wave_duration = 2.0
     time_stamp = 0.5
 
-    animation = _travelling_wave_generator(
+    animation = wave_generator(
         distances=distances,
         wave_amplitude=wave_amplitude,
         wave_duration=wave_duration,
@@ -143,5 +165,39 @@ def test_travelling_wave_single_timestamp():
     )
 
     assert len(animation) == 1
-    assert float(time_stamp) in animation
+    assert time_stamp in animation
     assert len(animation[float(time_stamp)]) == len(distances) - 1
+
+
+@pytest.mark.parametrize("wave_type", ["standing", "travelling"])
+def test_chain_wave_generator(wave_type):
+    """Verify that chain_wave_generator builds the animation with the correct shape and keys."""
+    # Build a simple mock armature with a single line of bones
+    # 3 bones along the x-axis: [0, 0, 0] -> [1, 0, 0] -> [2, 0, 0] -> [3, 0, 0]
+    b1 = Bone(head=(0.0, 0.0, 0.0), tail=(1.0, 0.0, 0.0))
+    armature = Armature(b1)
+    b2 = armature.add_connected_bone(b1, tail=(2.0, 0.0, 0.0))
+    _ = armature.add_connected_bone(b2, tail=(3.0, 0.0, 0.0))
+
+    index_bones = [0, 1, 2]
+
+    wave_duration = 2.0
+    frame_rate = 10.0  # 10 fps -> 20 frames total
+
+    animation = chain_wave_generator(
+        armature=armature,
+        index_bones=index_bones,
+        wave_amplitude=0.2,
+        wave_duration=wave_duration,
+        frame_rate=frame_rate,
+        wave=wave_type,
+    )
+
+    assert len(animation) == int(frame_rate * wave_duration)
+    for t, frame in animation.items():
+        # There are 3 bones, so we expect 3 rotation matrices in each frame
+        assert len(frame) == 3
+        for R in frame:
+            assert R.shape == (3, 3)
+            # Rotation matrices should be orthogonal
+            np.testing.assert_allclose(R.T @ R, np.eye(3), atol=1e-12)
