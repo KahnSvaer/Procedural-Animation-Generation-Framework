@@ -13,7 +13,8 @@ from animgen.core.armature import Armature
 
 from numpy.typing import NDArray
 from typing import Literal
-from animgen.core.types import AnimationFrame, Animation
+from animgen.core.types import Animation
+from animgen.utils.math import successive_rotations
 
 
 def _check_armature_chain(armature: Armature, index_bones: list[int]) -> bool:
@@ -287,11 +288,20 @@ def _travelling_wave_generator(
 
     animation: Animation = {}
 
+    bind_positions = np.stack(
+        (
+            distances,
+            np.zeros_like(distances),
+            np.zeros_like(distances),
+        ),
+        axis=-1,
+    )
+
     for time, frame_tangent in zip(
         np.atleast_1d(time_stamps),
         tangent,
     ):
-        frame: AnimationFrame = [
+        frame = [
             (0.0, 0.0, 0.0),
         ]
 
@@ -314,7 +324,11 @@ def _travelling_wave_generator(
         shifted_frame = [(p[0], p[1] - mean_y_ceil, p[2]) for p in frame]
         truncated_frame = shifted_frame[: len(distances)]
 
-        animation[float(time)] = truncated_frame
+        animation[float(time)] = successive_rotations(
+            bind_positions,
+            np.array(truncated_frame),
+            is_positions=True,
+        )
 
     return animation
 

@@ -2,6 +2,30 @@ import numpy as np
 from animgen.animation.wave import _travelling_wave_generator
 
 
+def reconstruct_positions(distances, rotations):
+    bind_positions = np.stack(
+        [
+            distances,
+            np.zeros_like(distances),
+            np.zeros_like(distances),
+        ],
+        axis=-1,
+    )
+    bind_vectors = np.diff(bind_positions, axis=0)
+
+    positions = [np.array([0.0, 0.0, 0.0])]
+    R_accum = np.eye(3)
+    for i, R_local in enumerate(rotations):
+        if hasattr(R_local, "detach"):
+            R_local = R_local.detach().cpu().numpy()
+        R_accum = R_local @ R_accum
+        positions.append(positions[-1] + R_accum @ bind_vectors[i])
+
+    positions = np.array(positions)
+    positions[:, 1] = positions[:, 1] - np.mean(positions[:, 1])
+    return positions
+
+
 def test_bone_length_conservation():
     """Verify that bone lengths are perfectly conserved (rigid bones) across all frames."""
     distances = np.linspace(0.0, 5.0, 11)  # 10 segments of length 0.5 each
@@ -24,9 +48,10 @@ def test_bone_length_conservation():
 
     for t, frame in animation.items():
         actual_lengths = []
-        for i in range(1, len(frame)):
-            p1 = np.array(frame[i - 1])
-            p2 = np.array(frame[i])
+        pts = reconstruct_positions(distances, frame)
+        for i in range(1, len(pts)):
+            p1 = pts[i - 1]
+            p2 = pts[i]
             actual_lengths.append(np.linalg.norm(p2 - p1))
 
         np.testing.assert_allclose(actual_lengths, expected_lengths, atol=1e-12)
@@ -51,8 +76,8 @@ def test_travelling_wave_periodicity():
         phi_t=0.0,
     )
 
-    frame1 = np.array(animation[t1])
-    frame2 = np.array(animation[t2])
+    frame1 = reconstruct_positions(distances, animation[t1])
+    frame2 = reconstruct_positions(distances, animation[t2])
 
     np.testing.assert_allclose(frame1, frame2, atol=1e-12)
 
@@ -85,10 +110,16 @@ def test_travelling_wave_spatial_growth():
     )
 
     max_y_no_growth = np.max(
-        [np.max(np.abs(np.array(f)[:, 1])) for f in anim_no_growth.values()]
+        [
+            np.max(np.abs(reconstruct_positions(distances, f)[:, 1]))
+            for f in anim_no_growth.values()
+        ]
     )
     max_y_growth = np.max(
-        [np.max(np.abs(np.array(f)[:, 1])) for f in anim_growth.values()]
+        [
+            np.max(np.abs(reconstruct_positions(distances, f)[:, 1]))
+            for f in anim_growth.values()
+        ]
     )
 
     # Amplitude with growth factor > 0 should be larger due to exponential scaling
@@ -113,4 +144,4 @@ def test_travelling_wave_single_timestamp():
 
     assert len(animation) == 1
     assert float(time_stamp) in animation
-    assert len(animation[float(time_stamp)]) == len(distances)
+    assert len(animation[float(time_stamp)]) == len(distances) - 1

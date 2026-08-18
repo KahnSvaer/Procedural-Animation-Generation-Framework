@@ -30,6 +30,7 @@ class AnimationClip:
         self,
         callback: AnimationCallback,
         list_bones: list[int],
+        offset: TimeSeconds = 0.0,
         *args: Any,
     ) -> None:
         """

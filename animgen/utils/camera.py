@@ -1,11 +1,11 @@
 import torch
 import torch.nn.functional as F
 
-from animgen.core.types import Vector3Tensor, PoseTransforms
+from animgen.core.types import Vector3Tensor, PoseTransformTensor
 from animgen.utils.camera_position import POSITION_GENERATORS
 
 
-def matrix3x4_to_4x4(matrix3x4) -> PoseTransforms:
+def matrix3x4_to_4x4(matrix3x4) -> PoseTransformTensor:
     """
     Convert a 3x4 transformation matrix to a 4x4 transformation matrix.
     """
@@ -18,7 +18,7 @@ def view_matrix(
     camera_positions: Vector3Tensor,
     lookat_position: Vector3Tensor = torch.tensor([0, 0, 0]),
     up: Vector3Tensor = torch.tensor([0, 1, 0]),
-) -> PoseTransforms:
+) -> PoseTransformTensor:
     """
     Given lookat position, camera position, and up vector, compute cam2world poses.
     """
@@ -56,7 +56,7 @@ def view_matrix(
 
 def sample_view_matrices(
     n: int, radius: float, lookat_position: Vector3Tensor = torch.tensor([0, 0, 0])
-) -> PoseTransforms:
+) -> PoseTransformTensor:
     """
     Sample n uniformly distributed view matrices spherically with given radius.
     """
@@ -79,7 +79,7 @@ def sample_view_matrices_polyhedra(
     radius: float,
     lookat_position: Vector3Tensor = torch.tensor([0, 0, 0]),
     **kwargs,
-) -> PoseTransforms:
+) -> PoseTransformTensor:
     """
     Sample view matrices according to a polygon with given radius.
     """

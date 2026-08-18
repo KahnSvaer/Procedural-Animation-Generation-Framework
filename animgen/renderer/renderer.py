@@ -54,7 +54,7 @@ from animgen.renderer.shader_programs import (
     FaceidShaderCache,
     BarycentricShaderCache,
 )
-from animgen.core.types import PoseTransforms
+from animgen.core.types import PoseTransformTensor
 from pathlib import Path
 
 
@@ -284,7 +284,7 @@ def render_multiview(
             **sampling_args,
         ).numpy()
 
-    def compute_lightdir(pose: PoseTransforms):
+    def compute_lightdir(pose: PoseTransformTensor):
         """ """
         lightdir = pose[:3, 3] - (lookat_position)
         return lightdir / np.linalg.norm(lightdir)
