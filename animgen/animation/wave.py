@@ -519,7 +519,7 @@ def chain_wave_generator(
     distances = [0.0]
     for bone_idx in index_bones:
         bone = armature.bones_list[bone_idx]
-        bone_len = np.linalg.norm(np.array(bone.tail) - np.array(bone.head))
+        bone_len = float(np.linalg.norm(np.array(bone.tail) - np.array(bone.head)))
         distances.append(distances[-1] + bone_len)
 
     total_timestamps = int(frame_rate * wave_duration)
