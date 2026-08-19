@@ -400,6 +400,184 @@ def _standing_wave_generator(
     return animation
 
 
+def _pulse_wave_generator(
+    distances: list[float] | NDArray[np.float64],
+    wave_amplitude: float,
+    wave_duration: float,
+    time_stamps: float | list[float] | NDArray[np.float64],
+    growth_factor: float = 0,
+    num_waves: float = 2.6,
+    phi_s: float = 0.0,
+    phi_t: float = 0.0,
+    pulse_width: float = 1.0,
+    pulse_center: float = 0.0,
+) -> Animation:
+    """
+    Generate a wave-pulse animation from spatial distances and timestamps.
+
+    The pulse wave is modeled as a localized Gaussian wave packet starting at ``pulse_center``:
+
+        u(s, t) = A exp(g s) exp( - (k (s - s_0) - omega t + phi_s + phi_t)^2 / (2 sigma^2) )
+                cos(k (s - s_0) - omega t + phi_s + phi_t)
+
+    where the spatial wave number ``k`` and temporal angular frequency
+    ``omega`` are defined as:
+
+        k = 2 pi N / L
+        omega = 2 pi / T
+
+    Here, ``N`` is the number of spatial waves, ``L`` is the total
+    spatial length, ``T`` is the temporal period of the wave, ``sigma``
+    is ``pulse_width``, and ``s_0`` is ``pulse_center`` (default=0.0).
+
+    Parameters
+    ----------
+    distances : list[float] | NDArray[np.float64]
+        Cumulative spatial distances ``s`` at which to evaluate the wave.
+        The distances are measured from the root of the armature and define
+        the x-coordinate of each point in the generated chain.
+
+    wave_amplitude : float
+        Base amplitude ``A`` of the wave at ``s = 0``.
+
+    wave_duration : float
+        Temporal period ``T`` of the wave in seconds.
+
+    time_stamps : float | list[float] | NDArray[np.float64]
+        Timestamp or timestamps ``t`` at which to evaluate the wave,
+        in seconds.
+
+    growth_factor : float, default=0.0
+        Exponential spatial growth rate ``g`` of the wave amplitude.
+
+    num_waves : float, default=2.6
+        Number of complete spatial wavelengths across the total spatial
+        length ``L``.
+
+    phi_s : float, default=0.0
+        Spatial phase offset in radians.
+
+    phi_t : float, default=0.0
+        Temporal phase offset in radians.
+
+    pulse_width : float, default=1.0
+        Spatial width parameter ``sigma`` of the Gaussian pulse envelope.
+
+    pulse_center : float, default=0.0
+        Initial spatial location ``s_0`` of the pulse peak at t = 0.
+
+    Returns
+    -------
+    Animation
+        Mapping from timestamps to animation frames containing local bone rotations.
+    """
+    distances = np.asarray(distances, dtype=np.float64)
+    time_stamps = np.asarray(time_stamps, dtype=np.float64)
+
+    total_length = distances[-1]
+    num_bones = len(distances) - 1
+
+    bone_length = total_length / num_bones
+
+    if num_waves <= 0.0:
+        ceil_waves = 1.0
+        ceil_length_target = total_length
+        ceil_num_bones = num_bones
+    else:
+        ceil_waves = float(np.ceil(num_waves))
+        ceil_length_target = total_length * (ceil_waves / num_waves)
+        ceil_num_bones = int(np.ceil(ceil_length_target / bone_length))
+
+    # Extend distances by appending segments of the same bone_length
+    ceil_distances = np.arange(ceil_num_bones + 1) * bone_length
+
+    wave_number = 2 * np.pi * num_waves / total_length
+    angular_frequency = 2 * np.pi / wave_duration
+
+    spatial_amplitude = wave_amplitude * np.exp(growth_factor * ceil_distances)
+
+    t_arr = np.atleast_1d(time_stamps)
+    phase = (
+        wave_number * (ceil_distances[None, :] - pulse_center)
+        - angular_frequency * t_arr[:, None]
+        + phi_s
+        + phi_t
+    )
+
+    sigma = float(pulse_width)
+    envelope = np.exp(-0.5 * (phase / sigma) ** 2)
+
+    spatial_deriv = (
+        spatial_amplitude[None, :]
+        * envelope
+        * (
+            growth_factor * np.cos(phase)
+            - wave_number * (np.sin(phase) + (phase / (sigma**2)) * np.cos(phase))
+        )
+    )
+
+    tangent = np.stack(
+        (
+            np.ones_like(spatial_deriv),
+            spatial_deriv,
+            np.zeros_like(spatial_deriv),
+        ),
+        axis=-1,
+    )
+
+    tangent /= np.linalg.norm(
+        tangent,
+        axis=-1,
+        keepdims=True,
+    )
+
+    animation: Animation = {}
+
+    bind_positions = np.stack(
+        (
+            distances,
+            np.zeros_like(distances),
+            np.zeros_like(distances),
+        ),
+        axis=-1,
+    )
+
+    for time, frame_tangent in zip(
+        t_arr,
+        tangent,
+    ):
+        frame = [
+            (0.0, 0.0, 0.0),
+        ]
+
+        for index in range(1, len(ceil_distances)):
+            seg_length = ceil_distances[index] - ceil_distances[index - 1]
+
+            previous_position = np.asarray(
+                frame[-1],
+                dtype=np.float64,
+            )
+
+            direction = frame_tangent[index - 1]
+
+            position = previous_position + seg_length * direction
+
+            frame.append(tuple(position.tolist()))
+
+        y_coords = np.array([p[1] for p in frame])
+        mean_y_ceil = np.mean(y_coords)
+        shifted_frame = [(p[0], p[1] - mean_y_ceil, p[2]) for p in frame]
+        truncated_frame = shifted_frame[: len(distances)]
+
+        animation[float(time)] = successive_rotations(
+            bind_positions,
+            np.array(truncated_frame),
+            is_positions=True,
+        )
+
+    return animation
+
+
 def chain_wave_generator(
     armature: Armature,
     index_bones: list[int],
@@ -410,11 +588,13 @@ def chain_wave_generator(
     num_waves: float = 2.6,
     phi_s: float = 0.0,
     phi_t: float = 0.0,
+    pulse_width: float = 1.0,
+    pulse_center: float = 0.0,
     axis=2,
-    wave: Literal["standing", "travelling"] = "travelling",
+    wave: Literal["standing", "travelling", "pulse"] = "travelling",
 ) -> Animation:
     """
-    Generate a sequence of armature positions representing a wave animation (standing or travelling).
+    Generate a sequence of armature positions representing a wave animation (standing, travelling, or pulse).
 
     The wave is evaluated at discrete time steps determined by
     ``frame_rate`` and ``wave_duration``. The resulting sequence can be
@@ -467,6 +647,12 @@ def chain_wave_generator(
         Temporal phase offset in radians. This shifts the starting point
         of the oscillation in time.
 
+    pulse_width : float, default=1.0
+        Spatial width parameter of the pulse envelope (used when wave='pulse').
+
+    pulse_center : float, default=0.0
+        Initial spatial location of the pulse peak at t = 0 (used when wave='pulse').
+
     axis : int, default=2
         Spatial axis along which the displacement is applied.
         ``0`` corresponds to X, ``1`` corresponds to Y, and ``2``
@@ -476,6 +662,7 @@ def chain_wave_generator(
         Type of wave to generate.
         ``standing`` corresponds to a standing wave.
         ``travelling`` corresponds to a travelling wave.
+        ``pulse`` corresponds to a wave pulse propagating in positive x.
 
     Returns
     -------
@@ -498,6 +685,10 @@ def chain_wave_generator(
 
         u(s, t) = 2 A exp(g s) cos(k s + phi_s) sin(omega t + phi_t)
 
+    For pulse waves, the displacement is calculated using::
+
+        u(s, t) = A exp(g s) exp( - (k (s - pulse_center) - omega t + phi_s + phi_t)^2 / (2 pulse_width^2) ) cos(k (s - pulse_center) - omega t + phi_s + phi_t)
+
     where the spatial wave number ``k`` and temporal angular frequency
     ``omega`` are defined as::
 
@@ -507,10 +698,6 @@ def chain_wave_generator(
 
     ``N`` is the number of spatial waves, ``L`` is the total armature
     length, and ``T`` is ``wave_duration``.
-
-    The temporal component is periodic with period ``T``, so evaluating
-    the function over integer multiples of ``wave_duration`` produces
-    the same wave state and allows the animation to loop seamlessly.
     """
 
     if not _check_armature_chain(armature, index_bones):
@@ -547,7 +734,20 @@ def chain_wave_generator(
             phi_s=phi_s,
             phi_t=phi_t,
         )
+    elif wave == "pulse":
+        return _pulse_wave_generator(
+            distances=distances,
+            wave_amplitude=wave_amplitude,
+            wave_duration=wave_duration,
+            time_stamps=time_stamps,
+            growth_factor=growth_factor,
+            num_waves=num_waves,
+            phi_s=phi_s,
+            phi_t=phi_t,
+            pulse_width=pulse_width,
+            pulse_center=pulse_center,
+        )
     else:
         raise ValueError(
-            f"Invalid wave type: {wave}, Permitted types: {'standing', 'travelling'}"
+            f"Invalid wave type: {wave}, Permitted types: {{'standing', 'travelling', 'pulse'}}"
         )

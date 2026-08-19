@@ -3,6 +3,7 @@ import pytest
 from animgen.animation.wave import (
     _travelling_wave_generator,
     _standing_wave_generator,
+    _pulse_wave_generator,
     chain_wave_generator,
 )
 from animgen.core.armature import Armature, Bone
@@ -34,7 +35,7 @@ def reconstruct_positions(distances, rotations):
 
 @pytest.mark.parametrize(
     "wave_generator",
-    [_travelling_wave_generator, _standing_wave_generator],
+    [_travelling_wave_generator, _standing_wave_generator, _pulse_wave_generator],
 )
 def test_bone_length_conservation(wave_generator):
     """Verify that bone lengths are perfectly conserved (rigid bones) across all frames."""
@@ -98,7 +99,7 @@ def test_wave_periodicity(wave_generator):
 
 @pytest.mark.parametrize(
     "wave_generator",
-    [_travelling_wave_generator, _standing_wave_generator],
+    [_travelling_wave_generator, _standing_wave_generator, _pulse_wave_generator],
 )
 def test_wave_spatial_growth(wave_generator):
     """Verify that spatial growth factor properly scales the wave amplitude along the armature."""
@@ -146,7 +147,7 @@ def test_wave_spatial_growth(wave_generator):
 
 @pytest.mark.parametrize(
     "wave_generator",
-    [_travelling_wave_generator, _standing_wave_generator],
+    [_travelling_wave_generator, _standing_wave_generator, _pulse_wave_generator],
 )
 def test_wave_single_timestamp(wave_generator):
     """Verify that passing a single timestamp works correctly and returns one frame."""
@@ -169,7 +170,7 @@ def test_wave_single_timestamp(wave_generator):
     assert len(animation[float(time_stamp)]) == len(distances) - 1
 
 
-@pytest.mark.parametrize("wave_type", ["standing", "travelling"])
+@pytest.mark.parametrize("wave_type", ["standing", "travelling", "pulse"])
 def test_chain_wave_generator(wave_type):
     """Verify that chain_wave_generator builds the animation with the correct shape and keys."""
     # Build a simple mock armature with a single line of bones
@@ -201,3 +202,33 @@ def test_chain_wave_generator(wave_type):
             assert R.shape == (3, 3)
             # Rotation matrices should be orthogonal
             np.testing.assert_allclose(R.T @ R, np.eye(3), atol=1e-12)
+
+
+def test_pulse_wave_propagation():
+    """Verify that pulse envelope propagates in the positive x direction over time."""
+    distances = np.linspace(0.0, 10.0, 101)
+    wave_amplitude = 0.5
+    wave_duration = 4.0
+    num_waves = 1.0
+
+    t1 = 0.5
+    t2 = 1.5
+
+    animation = _pulse_wave_generator(
+        distances=distances,
+        wave_amplitude=wave_amplitude,
+        wave_duration=wave_duration,
+        time_stamps=[t1, t2],
+        num_waves=num_waves,
+        pulse_width=1.5,
+    )
+
+    pts_t1 = reconstruct_positions(distances, animation[t1])
+    pts_t2 = reconstruct_positions(distances, animation[t2])
+
+    # Find position of max absolute y-displacement (envelope peak location)
+    peak_x_t1 = pts_t1[np.argmax(np.abs(pts_t1[:, 1])), 0]
+    peak_x_t2 = pts_t2[np.argmax(np.abs(pts_t2[:, 1])), 0]
+
+    # As time progresses from t1 to t2, peak should move in positive x direction
+    assert peak_x_t2 > peak_x_t1
