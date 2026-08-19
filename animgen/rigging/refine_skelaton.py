@@ -1,8 +1,59 @@
 import numpy as np
 
 
+def taubin_smooth_skeleton(
+    skeleton_vertices, skeleton_edges, passes=2, lambda_val=0.5, mu_val=-0.53
+):
+    """
+    Applies 1D Taubin non-shrinking smoothing to a skeleton graph.
+    Alternates positive shrink step (lambda > 0) and negative un-shrink step (mu < 0)
+    to remove high-frequency noise without causing curve volume shrinkage.
+
+    Parameters
+    ----------
+    skeleton_vertices : (M, 3) ndarray
+        Skeleton node positions.
+    skeleton_edges : (K, 2) ndarray
+        Graph edge connections.
+    passes : int
+        Number of Taubin smoothing passes (default 2).
+    lambda_val : float
+        Positive shrink factor (default 0.5).
+    mu_val : float
+        Negative un-shrink factor (default -0.53).
+
+    Returns
+    -------
+    smoothed_vertices : (M, 3) ndarray
+        Smoothed skeleton node positions.
+    """
+    v = np.array(skeleton_vertices, dtype=np.float64).copy()
+    num_v = len(v)
+    adj = {i: [] for i in range(num_v)}
+    for u, w in skeleton_edges:
+        adj[u].append(w)
+        adj[w].append(u)
+
+    for _ in range(passes):
+        # Step 1: Positive shrink
+        lap1 = np.zeros_like(v)
+        for i in range(num_v):
+            if len(adj[i]) >= 2:
+                lap1[i] = np.mean(v[adj[i]], axis=0) - v[i]
+        v += lambda_val * lap1
+
+        # Step 2: Negative un-shrink
+        lap2 = np.zeros_like(v)
+        for i in range(num_v):
+            if len(adj[i]) >= 2:
+                lap2[i] = np.mean(v[adj[i]], axis=0) - v[i]
+        v += mu_val * lap2
+
+    return v
+
+
 def subdivide_and_center_skeleton(
-    mesh_vertices, skeleton_vertices, skeleton_edges, max_edge_len=0.03, safety_iter=15
+    mesh_vertices, skeleton_vertices, skeleton_edges, max_edge_len=0.1, safety_iter=15
 ):
     """
     Subdivides long edges in the skeleton graph using a greedy midpoint insertion
@@ -29,7 +80,7 @@ def subdivide_and_center_skeleton(
     subdivided_edges : (Q, 2) ndarray
         Subdivided edge connectivity graph.
     """
-    curr_v = list(skeleton_vertices)
+    curr_v = [np.array(v, dtype=np.float64) for v in skeleton_vertices]
     curr_e = [list(e) for e in skeleton_edges]
 
     changed = True
@@ -39,8 +90,8 @@ def subdivide_and_center_skeleton(
         changed = False
         new_e = []
         for u_idx, v_idx in curr_e:
-            p_u = np.array(curr_v[u_idx])
-            p_v = np.array(curr_v[v_idx])
+            p_u = curr_v[u_idx]
+            p_v = curr_v[v_idx]
             edge_vec = p_v - p_u
             length = np.linalg.norm(edge_vec)
 
@@ -50,13 +101,16 @@ def subdivide_and_center_skeleton(
                     dir_vec = edge_vec / (length + 1e-12)
                     disp_to_mid = mesh_vertices - mid_initial
                     proj_along_dir = np.abs(np.dot(disp_to_mid, dir_vec))
-                    dist_to_mid = np.linalg.norm(disp_to_mid, axis=1)
 
-                    slice_mask = (proj_along_dir < max_edge_len * 0.5) & (
-                        dist_to_mid < max_edge_len * 3.0
-                    )
+                    # Unbiased orthogonal plane slice (prevents near-neighbor distance bias)
+                    slice_mask = proj_along_dir < (max_edge_len * 0.5)
+
                     if np.sum(slice_mask) >= 3:
-                        mid_centered = np.mean(mesh_vertices[slice_mask], axis=0)
+                        slice_verts = mesh_vertices[slice_mask]
+                        dist_to_mid = np.linalg.norm(slice_verts - mid_initial, axis=1)
+                        min_d = np.min(dist_to_mid)
+                        cluster_mask = dist_to_mid < (min_d * 2.5 + max_edge_len)
+                        mid_centered = np.mean(slice_verts[cluster_mask], axis=0)
                     else:
                         mid_centered = mid_initial
                 else:
@@ -79,11 +133,11 @@ def refine_and_center_skeleton_iterative(
     mesh_vertices,
     skeleton_vertices,
     skeleton_edges,
-    max_edge_len=0.03,
+    max_edge_len=0.1,
     num_iters=5,
     alpha=0.5,
     beta=0.8,
-    laplacian_weight=0.8,
+    laplacian_weight=0.3,
 ):
     """
     Refines and centers the skeleton iteratively by running a centering/relaxation pass
@@ -116,19 +170,18 @@ def refine_and_center_skeleton_iterative(
     refined_edges : (Q, 2) ndarray
         Refined edge connectivity graph.
     """
-    curr_v = [np.array(v) for v in skeleton_vertices]
+    curr_v = [np.array(v, dtype=np.float64) for v in skeleton_vertices]
     curr_e = [list(e) for e in skeleton_edges]
     velocities = [np.zeros(3) for _ in range(len(curr_v))]
 
     for iteration in range(num_iters):
-        # 1. Build adjacency list of current graph
         N_verts = len(curr_v)
         adj = {i: [] for i in range(N_verts)}
         for u, v in curr_e:
             adj[u].append(v)
             adj[v].append(u)
 
-        # 2. Smooth coordinates temporarily to estimate clean slice tangents
+        # Smooth coordinates temporarily to estimate clean slice tangents
         coords = np.array(curr_v)
         smoothed_coords = coords.copy()
         for _ in range(5):
@@ -141,14 +194,17 @@ def refine_and_center_skeleton_iterative(
                     )
             smoothed_coords = temp
 
-        # 3. Centering Pass with momentum and Laplacian smoothing for all current vertices
+        # Centering Pass with momentum and Laplacian smoothing for all current vertices
         for i in range(N_verts):
             neighbors = adj[i]
             if len(neighbors) == 1:
-                dir_vec = smoothed_coords[neighbors[0]] - smoothed_coords[i]
+                # Terminal endpoint: maintain position, avoid shrinking
+                total_shift = np.zeros(3)
+                velocities[i] = np.zeros(3)
+                continue
             elif len(neighbors) == 2:
                 dir_vec = smoothed_coords[neighbors[1]] - smoothed_coords[neighbors[0]]
-            elif len(neighbors) > 2:
+            else:
                 diffs = [smoothed_coords[nb] - smoothed_coords[i] for nb in neighbors]
                 ref = diffs[0]
                 aligned_diffs = [ref]
@@ -159,8 +215,6 @@ def refine_and_center_skeleton_iterative(
                     else:
                         aligned_diffs.append(d)
                 dir_vec = np.mean(aligned_diffs, axis=0)
-            else:
-                dir_vec = np.array([0.0, 0.0, 1.0])
 
             length = np.linalg.norm(dir_vec)
             if length > 1e-12:
@@ -170,16 +224,16 @@ def refine_and_center_skeleton_iterative(
 
             disp_to_v = mesh_vertices - curr_v[i]
             proj_along_dir = np.abs(np.dot(disp_to_v, dir_vec))
-            dist_to_v = np.linalg.norm(disp_to_v, axis=1)
 
-            local_radius = np.min(dist_to_v)
-            search_radius = max(local_radius * 2.0, max_edge_len * 1.5)
+            # Unbiased plane slice perpendicular to tangent
+            slice_mask = proj_along_dir < (max_edge_len * 0.5)
 
-            slice_mask = (proj_along_dir < max_edge_len * 1.5) & (
-                dist_to_v < search_radius
-            )
             if np.sum(slice_mask) >= 3:
-                centroid = np.mean(mesh_vertices[slice_mask], axis=0)
+                slice_verts = mesh_vertices[slice_mask]
+                dist_to_v = np.linalg.norm(slice_verts - curr_v[i], axis=1)
+                min_d = np.min(dist_to_v)
+                cluster_mask = dist_to_v < (min_d * 2.5 + max_edge_len)
+                centroid = np.mean(slice_verts[cluster_mask], axis=0)
             else:
                 centroid = curr_v[i]
 
@@ -189,18 +243,18 @@ def refine_and_center_skeleton_iterative(
                 laplacian = (
                     np.mean([curr_v[nb] for nb in neighbors], axis=0) - curr_v[i]
                 )
-                laplacian = laplacian - np.dot(laplacian, dir_vec) * dir_vec
+                # Tangential Laplacian only to prevent curve shrinkage
+                lap_tangent = np.dot(laplacian, dir_vec) * dir_vec
                 total_shift = (
                     1.0 - laplacian_weight
-                ) * shift + laplacian_weight * laplacian
+                ) * shift + laplacian_weight * lap_tangent
             else:
                 total_shift = shift
 
-            # Update velocity and position with momentum
             velocities[i] = beta * velocities[i] + (1.0 - beta) * alpha * total_shift
             curr_v[i] = curr_v[i] + velocities[i]
 
-        # 4. Subdivide long edges
+        # Subdivide long edges
         new_e = []
         for u_idx, v_idx in curr_e:
             p_u = curr_v[u_idx]
@@ -214,16 +268,15 @@ def refine_and_center_skeleton_iterative(
 
                 disp_to_mid = mesh_vertices - mid_initial
                 proj_along_dir = np.abs(np.dot(disp_to_mid, dir_vec))
-                dist_to_mid = np.linalg.norm(disp_to_mid, axis=1)
 
-                local_radius = np.min(dist_to_mid)
-                search_radius = max(local_radius * 2.0, max_edge_len * 1.5)
+                slice_mask = proj_along_dir < (max_edge_len * 0.5)
 
-                slice_mask = (proj_along_dir < max_edge_len * 1.5) & (
-                    dist_to_mid < search_radius
-                )
                 if np.sum(slice_mask) >= 3:
-                    mid_centered = np.mean(mesh_vertices[slice_mask], axis=0)
+                    slice_verts = mesh_vertices[slice_mask]
+                    dist_to_mid = np.linalg.norm(slice_verts - mid_initial, axis=1)
+                    min_d = np.min(dist_to_mid)
+                    cluster_mask = dist_to_mid < (min_d * 2.5 + max_edge_len)
+                    mid_centered = np.mean(slice_verts[cluster_mask], axis=0)
                 else:
                     mid_centered = mid_initial
 
@@ -237,7 +290,7 @@ def refine_and_center_skeleton_iterative(
                 new_e.append([u_idx, v_idx])
         curr_e = new_e
 
-    # 5. Final cleanup subdivision pass (no centering) to guarantee max_edge_len bounds strictly
+    # Final cleanup subdivision pass
     changed = True
     cleanup_iters = 0
     while changed and cleanup_iters < 10:
