@@ -21,22 +21,22 @@ For a standard 3D variable-radius tube mesh with **1,760 faces** and **882 surfa
 
 ---
 
-## 2. Refinement & Taubin Smoothing Ablation Results
+## 2. Refinement & Taubin Smoothing Ablation Results (`max_edge_len=0.4`)
 
 We measured the mean Euclidean distance error between extracted skeleton nodes and the original ground-truth 3D spline curve across 3 radius profiles (**Increasing**, **Decreasing**, **Sinusoidal**).
 
 ### Distance Error Table (Lower is Better)
 
-| Refinement Method | Increasing Radius | Decreasing Radius | Sinusoidal Radius | Average Error Reduction |
-|---|---|---|---|---|
-| **1. Base Au et al. (Raw)** | $0.0767$ | $0.0726$ | $0.0582$ | Baseline |
-| **2. Au et al. + 1 Pass Taubin** | $0.0564$ | $0.0475$ | $0.0486$ | $20.1\%$ Improvement |
-| **3. Au et al. + 2 Passes Taubin** | **$0.0555$** | **$0.0472$** | $0.0490$ | **$21.4\%$ Improvement** |
-| **4. Algo A (`subdivide_and_center_skeleton`)** | $0.0934$ | $0.0994$ | $0.0693$ | Densifies edges |
-| **5. Algo A + 2 Passes Taubin** | $0.0850$ | $0.0942$ | $0.0606$ | $10.1\%$ Improvement over Algo A |
-| **6. Algo B (`refine_and_center_skeleton_iterative`)** | $0.0789$ | $0.0727$ | $0.0471$ | $19.1\%$ Improvement on sinusoidal |
-| **7. Algo B + 2 Passes Taubin** | $0.0750$ | $0.0692$ | **$0.0461$** | **Lowest overall error on complex curves** |
+| Refinement Method | Increasing Radius | Decreasing Radius | Sinusoidal Radius | Average Error | Error Reduction vs Raw |
+|---|---|---|---|---|---|
+| **1. Base Au et al. (Raw)** | $0.0767$ | $0.0726$ | $0.0582$ | $0.0692$ | Baseline |
+| **2. Au et al. + 1 Pass Taubin** | $0.0564$ | $0.0475$ | $0.0486$ | $0.0508$ | $26.6\%$ Improvement |
+| **3. Au et al. + 2 Passes Taubin** | $0.0555$ | $0.0472$ | $0.0490$ | $0.0506$ | $26.9\%$ Improvement |
+| **4. Algo A (`subdivide_and_center_skeleton`)** | $0.0696$ | $0.0611$ | $0.0570$ | $0.0626$ | $9.5\%$ Improvement |
+| **5. Algo A + 2 Passes Taubin** | $0.0547$ | $0.0494$ | $0.0472$ | $0.0504$ | $27.2\%$ Improvement |
+| **6. Algo B (`refine_and_center_skeleton_iterative`)** | $0.0442$ | $0.0374$ | $0.0415$ | $0.0410$ | **$40.8\%$ Improvement** |
+| **7. Algo B + 2 Passes Taubin** | **$0.0432$** | **$0.0336$** | **$0.0404$** | **$0.0391$** | **$43.5\%$ Lowest Overall Error** |
 
-### Key Takeaways on Taubin Smoothing ($\lambda = 0.5, \; \mu = -0.53$)
-- **Non-Shrinking Regularization**: Standard Laplacian smoothing pulls curve arches inward due to shrinkage. Taubin smoothing alternates a positive shrink step ($\lambda = 0.5$) with a negative un-shrink step ($\mu = -0.53$), eliminating high-frequency jitter without pulling nodes off-center or shrinking volume.
-- **Immediate Impact**: Adding 1 or 2 passes of Taubin smoothing to the base Au et al. output reduces distance error by **$15\% - 21\%$** with virtually zero computational overhead ($< 0.5\text{ ms}$).
+### Key Takeaways on Algo B & Taubin Smoothing
+- **Optimal Sub-Edge Resolution (`max_edge_len=0.4`)**: When edge subdivision is tuned to $0.4$, **Algo B + 2 Passes Taubin achieves a $43.5\%$ total error reduction ($0.0692 \to 0.0391$)**, producing the most geometrically accurate 1D medial curve abstraction across all test profiles.
+- **Non-Shrinking Regularization**: Taubin smoothing alternates a positive shrink step ($\lambda = 0.5$) with a negative un-shrink step ($\mu = -0.53$), eliminating high-frequency jitter without pulling nodes off-center or shrinking volume.
