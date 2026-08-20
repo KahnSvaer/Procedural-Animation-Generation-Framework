@@ -45,7 +45,7 @@ import trimesh
 from tqdm import tqdm
 from typing import Any
 
-from animgen.io.model_io import load_model
+from animgen.io.model_input import load_model
 from animgen.utils.camera import sample_view_matrices, sample_view_matrices_polyhedra
 from animgen.utils.math import range_norm
 from animgen.utils.mesh import duplicate_verts

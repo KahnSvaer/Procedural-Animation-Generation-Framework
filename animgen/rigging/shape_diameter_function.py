@@ -16,7 +16,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 from animgen.utils.mesh import duplicate_verts
-from animgen.io.model_io import load_model
+from animgen.io.model_input import load_model
 
 
 EPSILON = 1e-20

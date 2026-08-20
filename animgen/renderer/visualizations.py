@@ -2,7 +2,7 @@ import trimesh
 import numpy as np
 from typing import Any, Tuple, TYPE_CHECKING
 from pathlib import Path
-from animgen.io.model_io import load_model
+from animgen.io.model_input import load_model
 
 if TYPE_CHECKING:
     from animgen.core.models.model import BaseModelClass

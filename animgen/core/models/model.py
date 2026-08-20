@@ -4,7 +4,7 @@ import numpy as np
 import trimesh
 
 from animgen.renderer.renderer import Renderer, render_multiview
-from animgen.io.model_io import load_model
+from animgen.io.model_input import load_model
 
 
 class BaseModelClass:
