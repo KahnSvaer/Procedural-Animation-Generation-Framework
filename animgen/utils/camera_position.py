@@ -1,7 +1,9 @@
 """
 Camera Position Generators to experiment with SAM mesh segmentation later to choose which works better overall
 
-Reference: https://github.com/gtangg12/samesh/
+References
+----------
+https://github.com/gtangg12/samesh/
 """
 
 import numpy as np

@@ -1,10 +1,9 @@
 """
 Module for standing wave generation along an armature.
 
-Reference:
-- https://en.wikipedia.org/wiki/Standing_wave
-
-
+References
+----------
+https://en.wikipedia.org/wiki/Standing_wave
 """
 
 import numpy as np

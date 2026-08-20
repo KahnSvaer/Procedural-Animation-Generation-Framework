@@ -5,24 +5,11 @@ Mesh contraction and skeleton extraction code adapted from Au et al. (2008),
 This implementation is a Python adaptation of the original C++ code, with
 modifications for clarity and integration.
 
-Reference: @article{
-        10.1145/1360612.1360643,
-        author = {Au, Oscar Kin-Chung and Tai, Chiew-Lan and Chu, Hung-Kuo and Cohen-Or, Daniel and Lee, Tong-Yee},
-        title = {Skeleton extraction by mesh contraction},
-        year = {2008},
-        issue_date = {August 2008},
-        publisher = {Association for Computing Machinery},
-        address = {New York, NY, USA},
-        volume = {27},
-        number = {3},
-        issn = {0730-0301},
-        url = {https://doi.org/10.1145/1360612.1360643},
-        journal = {ACM Trans. Graph.},
-        month = aug,
-        pages = {1–10},
-        numpages = {10},
-        keywords = {smoothing, skinning, skeleton, segmentation, mesh contraction, Laplacian}
-    }
+References
+----------
+.. [1] Au, Oscar Kin-Chung, Tai, Chiew-Lan, Chu, Hung-Kuo, Cohen-Or, Daniel,
+   and Lee, Tong-Yee. "Skeleton extraction by mesh contraction." ACM TOG 27(3):44, 2008.
+   https://doi.org/10.1145/1360612.1360643
 """
 
 import trimesh
