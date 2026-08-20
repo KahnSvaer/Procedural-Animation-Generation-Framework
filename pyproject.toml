@@ -25,6 +25,7 @@ dependencies = [
     "jaxtyping>=0.3.11",
     "triangle>=20250106",
     "scipy>=1.17.1",
+    "pygltflib>=1.16.5",
 ]
 
 [tool.setuptools]
