@@ -1,57 +1,6 @@
 import numpy as np
 
 
-def taubin_smooth_skeleton(
-    skeleton_vertices, skeleton_edges, passes=2, lambda_val=0.5, mu_val=-0.53
-):
-    """
-    Applies 1D Taubin non-shrinking smoothing to a skeleton graph.
-    Alternates positive shrink step (lambda > 0) and negative un-shrink step (mu < 0)
-    to remove high-frequency noise without causing curve volume shrinkage.
-
-    Parameters
-    ----------
-    skeleton_vertices : (M, 3) ndarray
-        Skeleton node positions.
-    skeleton_edges : (K, 2) ndarray
-        Graph edge connections.
-    passes : int
-        Number of Taubin smoothing passes (default 2).
-    lambda_val : float
-        Positive shrink factor (default 0.5).
-    mu_val : float
-        Negative un-shrink factor (default -0.53).
-
-    Returns
-    -------
-    smoothed_vertices : (M, 3) ndarray
-        Smoothed skeleton node positions.
-    """
-    v = np.array(skeleton_vertices, dtype=np.float64).copy()
-    num_v = len(v)
-    adj = {i: [] for i in range(num_v)}
-    for u, w in skeleton_edges:
-        adj[u].append(w)
-        adj[w].append(u)
-
-    for _ in range(passes):
-        # Step 1: Positive shrink
-        lap1 = np.zeros_like(v)
-        for i in range(num_v):
-            if len(adj[i]) >= 2:
-                lap1[i] = np.mean(v[adj[i]], axis=0) - v[i]
-        v += lambda_val * lap1
-
-        # Step 2: Negative un-shrink
-        lap2 = np.zeros_like(v)
-        for i in range(num_v):
-            if len(adj[i]) >= 2:
-                lap2[i] = np.mean(v[adj[i]], axis=0) - v[i]
-        v += mu_val * lap2
-
-    return v
-
-
 def subdivide_and_center_skeleton(
     mesh_vertices, skeleton_vertices, skeleton_edges, max_edge_len=0.1, safety_iter=15
 ):

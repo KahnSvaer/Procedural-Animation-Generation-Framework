@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 import numpy as np
 import trimesh
 
@@ -7,7 +7,8 @@ from animgen.core.armature import Armature
 from animgen.renderer.renderer import Renderer, render_multiview
 from animgen.animation.animator import Animator
 from animgen.io.model_input import load_model
-# from animgen.io.glb_output import export_glb
+from animgen.io.glb_output import export_glb
+from animgen.rigging.skinning import compute_auto_skin_weights
 
 
 class BaseModelClass:
@@ -31,6 +32,7 @@ class BaseModelClass:
 
         self.armature: Optional[Armature] = None
         self.animator: Optional[Animator] = None
+        self.skin_weights: Optional[dict[str, np.ndarray]] = None
 
     @property
     def vertices(self) -> np.ndarray:
@@ -83,9 +85,37 @@ class BaseModelClass:
         )
         return output
 
-    def export(self, output_path: str | Path) -> Path:
+    def compute_skin_weights(self) -> dict[str, np.ndarray]:
         """
-        Exports the model's mesh and armature to a GLB file.
+        Computes and caches skin weights for the current mesh and armature.
+
+        Returns
+        -------
+        dict[str, np.ndarray]
+            Mapping from bone ID to 1D numpy array of vertex skin weights.
         """
-        pass
-        # return export_glb(self, output_path)
+        if self.armature is None:
+            raise ValueError(
+                "Cannot compute skin weights: no Armature assigned to self.armature."
+            )
+        self.skin_weights = compute_auto_skin_weights(self.mesh, self.armature)
+        return self.skin_weights
+
+    def export(
+        self,
+        output_path: str | Path,
+        animation: Optional[Any] = None,
+    ) -> Path:
+        """
+        Exports the model's mesh, armature, and optional animation to a GLB file.
+        """
+        if self.armature is not None and self.skin_weights is None:
+            self.compute_skin_weights()
+
+        return export_glb(
+            mesh=self.mesh,
+            output_path=output_path,
+            armature=self.armature,
+            skin_weights=self.skin_weights,
+            animation=animation,
+        )
