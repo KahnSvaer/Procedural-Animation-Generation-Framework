@@ -6,12 +6,12 @@ readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
     "accelerate>=1.13.0",
-    "numpy>=2.0.0",
-    "opencv-python>=4.12.0",
+    "numpy>=1.26.4,<2.0.0",
+    "opencv-python>=4.10.0,<4.12.0",
     "pillow>=12.2.0",
     "pyrender>=0.1.45",
     "python-dotenv>=1.2.2",
-    "rembg[gpu]>=2.0.75",
+    "rembg[gpu]>=2.0.50,<2.0.70",
     "pymatting==1.1.15",
     "torch==2.6.0",
     "torchvision==0.21.0",
@@ -24,7 +24,7 @@ dependencies = [
     "igraph>=1.0.0",
     "jaxtyping>=0.3.11",
     "triangle>=20250106",
-    "scipy>=1.17.1",
+    "scipy>=1.13.0,<1.15.0",
     "pygltflib>=1.16.5",
 ]
 
