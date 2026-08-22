@@ -1,10 +1,13 @@
 from pathlib import Path
-
+from typing import Optional
 import numpy as np
 import trimesh
 
+from animgen.core.armature import Armature
 from animgen.renderer.renderer import Renderer, render_multiview
+from animgen.animation.animator import Animator
 from animgen.io.model_input import load_model
+# from animgen.io.glb_output import export_glb
 
 
 class BaseModelClass:
@@ -25,6 +28,9 @@ class BaseModelClass:
             },
         )
         self.adj_graph = self.mesh.face_adjacency
+
+        self.armature: Optional[Armature] = None
+        self.animator: Optional[Animator] = None
 
     @property
     def vertices(self) -> np.ndarray:
@@ -76,3 +82,10 @@ class BaseModelClass:
             verbose=verbose,
         )
         return output
+
+    def export(self, output_path: str | Path) -> Path:
+        """
+        Exports the model's mesh and armature to a GLB file.
+        """
+        pass
+        # return export_glb(self, output_path)
