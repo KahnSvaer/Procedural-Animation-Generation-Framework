@@ -76,3 +76,8 @@ exclude = [
     "demo",
 ]
 typeCheckingMode = "standard"
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:tostring\\(\\) is deprecated:DeprecationWarning",
+]
