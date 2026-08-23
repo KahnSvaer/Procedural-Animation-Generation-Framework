@@ -1,11 +1,3 @@
-"""
-Mathematical utilities for vector, matrix, and quaternion transformations.
-
-Provides functions for range normalization, vector-to-vector rotation computation,
-successive hierarchical chain rotations, and quaternion SLERP operations.
-"""
-
-from animgen.core.types import AnimationFrame
 import numpy as np
 import torch
 
@@ -140,50 +132,6 @@ def rotation_matrix_from_vectors(
     if is_numpy:
         return R.cpu().numpy()
     return R
-
-
-def successive_rotations(
-    src: torch.Tensor | np.ndarray,
-    tgt: torch.Tensor | np.ndarray,
-    is_positions: bool = False,
-) -> AnimationFrame:
-    """
-    Compute successive rotation matrices for a hierarchical chain of segments,
-    accounting for the accumulated rotation of parent segments.
-
-    Parameters
-    ----------
-    src : (N, 3) or (N+1, 3) torch.Tensor | np.ndarray
-        The source segment vectors or joint positions.
-    tgt : (N, 3) or (N+1, 3) torch.Tensor | np.ndarray
-        The target segment vectors or joint positions.
-    is_positions : bool, default=False
-        If True, inputs are treated as joint positions and diffed along the first dimension
-        to produce segment vectors.
-
-    Returns
-    -------
-    rotations : AnimationFrame
-        The local rotation matrices for each segment.
-    """
-    src_t = torch.as_tensor(src, dtype=torch.float64)
-    tgt_t = torch.as_tensor(tgt, dtype=torch.float64)
-
-    if is_positions:
-        src_t = torch.diff(src_t, dim=0)
-        tgt_t = torch.diff(tgt_t, dim=0)
-
-    N = len(src_t)
-    rotations = []
-    R_accum = torch.eye(3, dtype=torch.float64, device=src_t.device)
-
-    for i in range(N):
-        src_rotated = R_accum @ src_t[i]
-        R_local = rotation_matrix_from_vectors(src_rotated, tgt_t[i])
-        rotations.append(R_local)
-        R_accum = R_local @ R_accum
-
-    return rotations
 
 
 def rotation_matrix_to_quaternion(R: np.ndarray | torch.Tensor) -> np.ndarray:

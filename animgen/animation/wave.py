@@ -13,7 +13,7 @@ from animgen.core.armature import Armature
 from numpy.typing import NDArray
 from typing import Literal
 from animgen.core.types import Animation
-from animgen.utils.math import successive_rotations
+from animgen.animation.kinematics import successive_rotations
 
 
 def _check_armature_chain(armature: Armature, index_bones: list[int]) -> bool:
