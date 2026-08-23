@@ -17,6 +17,7 @@ from animgen.core.armature import Armature
 from animgen.rigging.skinning import compute_auto_skin_weights
 from animgen.animation.animator import AnimationClip
 from animgen.core.types import Animation
+from animgen.utils.math import rotation_matrix_to_quaternion
 
 
 def _append_binary_buffer(
@@ -240,9 +241,10 @@ def add_animation(
     animation: Union[AnimationClip, Animation, dict[float, Any]],
     bone_to_node_idx: dict[str, int],
     clip_name: str = "Animation",
+    armature: Optional[Armature] = None,
 ) -> pygltflib.GLTF2:
     """
-    Sub-function to attach skeletal animation tracks (keyframes / rotation channels)
+    Attaches skeletal animation tracks (keyframes / rotation channels)
     to a rigged GLTF2 object.
 
     Parameters
@@ -253,15 +255,23 @@ def add_animation(
         The animation data or AnimationClip containing time -> frame transformations.
     bone_to_node_idx : dict[str, int]
         Mapping from bone ID to glTF Node index.
-    clip_name : str
-        Name of the animation track (default: 'Animation').
+    clip_name : str, default='Animation'
+        Name of the animation track.
+    armature : Optional[Armature], default=None
+        Armature structure corresponding to the bones.
 
     Returns
     -------
     pygltflib.GLTF2
         The updated GLTF2 object with the animation appended.
     """
-    positions = getattr(animation, "positions", animation)
+    if hasattr(animation, "positions"):
+        if not animation.positions and hasattr(animation, "generate_animation"):
+            animation.generate_animation()
+        positions = animation.positions
+    else:
+        positions = animation
+
     if not positions:
         return gltf
 
@@ -271,7 +281,7 @@ def add_animation(
 
     time_array = np.array(timestamps, dtype=np.float32)
     time_bv = _append_binary_buffer(gltf, time_array.tobytes())
-    _append_accessor(
+    time_acc = _append_accessor(
         gltf,
         time_bv,
         pygltflib.FLOAT,
@@ -283,6 +293,56 @@ def add_animation(
 
     channels: list[pygltflib.AnimationChannel] = []
     samplers: list[pygltflib.AnimationSampler] = []
+
+    bones_list = []
+    if armature is not None:
+        bones_list = armature.bones_list
+    elif hasattr(animation, "armature") and animation.armature is not None:
+        bones_list = animation.armature.bones_list
+
+    if bones_list:
+        for b_idx, bone in enumerate(bones_list):
+            if bone.id not in bone_to_node_idx:
+                continue
+            node_idx = bone_to_node_idx[bone.id]
+
+            quats = []
+            for t in timestamps:
+                frame = positions[t]
+                if b_idx < len(frame):
+                    R = frame[b_idx]
+                    q = rotation_matrix_to_quaternion(R)
+                    quats.append([float(q[1]), float(q[2]), float(q[3]), float(q[0])])
+                else:
+                    quats.append([0.0, 0.0, 0.0, 1.0])
+
+            quat_array = np.array(quats, dtype=np.float32)
+            quat_bv = _append_binary_buffer(gltf, quat_array.tobytes())
+            quat_acc = _append_accessor(
+                gltf,
+                quat_bv,
+                pygltflib.FLOAT,
+                len(timestamps),
+                pygltflib.VEC4,
+            )
+
+            sampler_idx = len(samplers)
+            samplers.append(
+                pygltflib.AnimationSampler(
+                    input=time_acc,
+                    interpolation=pygltflib.ANIM_LINEAR,
+                    output=quat_acc,
+                )
+            )
+            channels.append(
+                pygltflib.AnimationChannel(
+                    sampler=sampler_idx,
+                    target=pygltflib.AnimationChannelTarget(
+                        node=node_idx,
+                        path="rotation",
+                    ),
+                )
+            )
 
     gltf_anim = pygltflib.Animation(
         name=clip_name, channels=channels, samplers=samplers
@@ -350,7 +410,7 @@ def export_glb(
 
     # Add Animation tracks if present
     if animation is not None and bone_to_node_idx:
-        gltf = add_animation(gltf, animation, bone_to_node_idx)
+        gltf = add_animation(gltf, animation, bone_to_node_idx, armature=armature)
 
     # Save GLB file
     gltf.save(str(out_path))
