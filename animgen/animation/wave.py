@@ -237,7 +237,7 @@ def _standing_wave_generator(
     The standing wave is modeled as:
 
         u(s, t) = 2 A exp(g s)
-                cos(k s + phi_s) sin(omega t + phi_t)
+                sin(k s + phi_s) sin(omega t + phi_t)
 
     where the spatial wave number ``k`` and temporal angular frequency
     ``omega`` are defined as:
@@ -329,7 +329,7 @@ def _standing_wave_generator(
     cos_part = np.cos(wave_number * ceil_distances + phi_s)
     sin_part = np.sin(wave_number * ceil_distances + phi_s)
 
-    spatial_deriv = growth_factor * cos_part - wave_number * sin_part
+    spatial_deriv = growth_factor * sin_part + wave_number * cos_part
 
     t_arr = np.atleast_1d(time_stamps)
     temporal_part = np.sin(angular_frequency * t_arr[..., None] + phi_t)
@@ -682,7 +682,7 @@ def chain_wave_generator(
 
     For standing waves, the displacement is calculated using::
 
-        u(s, t) = 2 A exp(g s) cos(k s + phi_s) sin(omega t + phi_t)
+        u(s, t) = 2 A exp(g s) sin(k s + phi_s) sin(omega t + phi_t)
 
     For pulse waves, the displacement is calculated using::
 

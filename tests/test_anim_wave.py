@@ -232,3 +232,54 @@ def test_pulse_wave_propagation():
 
     # As time progresses from t1 to t2, peak should move in positive x direction
     assert peak_x_t2 > peak_x_t1
+
+
+def test_standing_wave_peak_count():
+    """Verify that standing wave with num_waves=1.0 produces 2 peaks (crest and trough)."""
+    distances = np.linspace(0.0, 4.0, 41)
+    duration = 2.0
+    t_peak = duration / 4.0  # t = T/4, where sin(omega*t) = 1
+
+    num_bones = len(distances) - 1
+    root = Bone(id="b0", head=(0.0, 0.0, 0.0), tail=(distances[1], 0.0, 0.0))
+    armature = Armature(root)
+    curr = root
+    for i in range(1, num_bones):
+        curr = armature.add_connected_bone(curr, tail=(distances[i + 1], 0.0, 0.0))
+
+    # num_waves = 1.0 -> 1 full wavelength -> 2 peaks (one positive, one negative)
+    anim_1 = _standing_wave_generator(
+        distances=distances,
+        wave_amplitude=0.35,
+        wave_duration=duration,
+        time_stamps=[t_peak],
+        num_waves=1.0,
+    )
+    from animgen.animation.kinematics import compute_forward_kinematics
+
+    _, pos_1 = compute_forward_kinematics(armature, anim_1[t_peak])
+    y_1 = np.array(
+        [pos_1["b0"][0][1]] + [pos_1[b.id][1][1] for b in armature.bones_list]
+    )
+    # For num_waves=1.0: y has a positive crest (>0) and a negative trough (<0)
+    assert np.max(y_1) > 0.3
+    assert np.min(y_1) < -0.3
+    # Check that there is a zero-crossing near the middle (node)
+    mid_idx = len(y_1) // 2
+    assert np.isclose(y_1[mid_idx], 0.0, atol=0.1)
+
+    # num_waves = 0.5 -> half wavelength -> 1 peak (fundamental mode)
+    anim_05 = _standing_wave_generator(
+        distances=distances,
+        wave_amplitude=0.35,
+        wave_duration=duration,
+        time_stamps=[t_peak],
+        num_waves=0.5,
+    )
+    _, pos_05 = compute_forward_kinematics(armature, anim_05[t_peak])
+    y_05 = np.array(
+        [pos_05["b0"][0][1]] + [pos_05[b.id][1][1] for b in armature.bones_list]
+    )
+    # In fundamental mode, all y displacements are on one side (>= 0), peaking in the middle
+    assert np.min(y_05) >= -1e-6
+    assert np.max(y_05) > 0.3
