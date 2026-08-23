@@ -265,6 +265,9 @@ def add_animation(
     pygltflib.GLTF2
         The updated GLTF2 object with the animation appended.
     """
+    if hasattr(animation, "name") and animation.name and clip_name == "Animation":
+        clip_name = animation.name
+
     if hasattr(animation, "positions"):
         if not animation.positions and hasattr(animation, "generate_animation"):
             animation.generate_animation()
@@ -410,7 +413,30 @@ def export_glb(
 
     # Add Animation tracks if present
     if animation is not None and bone_to_node_idx:
-        gltf = add_animation(gltf, animation, bone_to_node_idx, armature=armature)
+        if hasattr(animation, "animations"):
+            for clip in animation.animations.values():
+                clip_n = getattr(clip, "name", "Animation")
+                gltf = add_animation(
+                    gltf, clip, bone_to_node_idx, clip_name=clip_n, armature=armature
+                )
+        elif isinstance(animation, (list, tuple)):
+            for clip in animation:
+                clip_n = getattr(clip, "name", "Animation")
+                gltf = add_animation(
+                    gltf, clip, bone_to_node_idx, clip_name=clip_n, armature=armature
+                )
+        elif isinstance(animation, dict) and not any(
+            isinstance(k, (int, float)) for k in animation.keys()
+        ):
+            for name, clip in animation.items():
+                gltf = add_animation(
+                    gltf, clip, bone_to_node_idx, clip_name=str(name), armature=armature
+                )
+        else:
+            clip_n = getattr(animation, "name", "Animation")
+            gltf = add_animation(
+                gltf, animation, bone_to_node_idx, clip_name=clip_n, armature=armature
+            )
 
     # Save GLB file
     gltf.save(str(out_path))

@@ -173,3 +173,44 @@ def test_export_glb_with_precomputed_skin_weights(tmp_path: Path):
 def test_export_glb_invalid_asset_type():
     with pytest.raises(TypeError):
         export_glb("invalid_mesh", "out.glb")
+
+
+def test_export_glb_with_multiple_animations(tmp_path: Path):
+    from animgen.animation.clip import AnimationClip
+    from animgen.animation.animator import Animator
+
+    box = trimesh.creation.box()
+    root = Bone(id="root_bone", head=(0.0, 0.0, 0.0), tail=(0.0, 0.0, 0.5))
+    armature = Armature(root)
+
+    clip1 = AnimationClip(name="Clip1", duration=1.0, armature=armature)
+    clip1.positions = {
+        0.0: [np.eye(3, dtype=np.float32)],
+        1.0: [np.eye(3, dtype=np.float32)],
+    }
+    clip2 = AnimationClip(name="Clip2", duration=2.0, armature=armature)
+    clip2.positions = {
+        0.0: [np.eye(3, dtype=np.float32)],
+        2.0: [np.eye(3, dtype=np.float32)],
+    }
+
+    # Test list of clips
+    out_file1 = tmp_path / "multi_clips.glb"
+    res1 = export_glb(box, out_file1, armature=armature, animation=[clip1, clip2])
+    assert res1.exists()
+    gltf1 = pygltflib.GLTF2().load(str(out_file1))
+    assert len(gltf1.animations) == 2
+    assert gltf1.animations[0].name == "Clip1"
+    assert gltf1.animations[1].name == "Clip2"
+
+    # Test Animator instance
+    animator = Animator(armature=armature)
+    animator.add_animation_clip(clip1)
+    animator.add_animation_clip(clip2)
+    out_file2 = tmp_path / "animator.glb"
+    res2 = export_glb(box, out_file2, armature=armature, animation=animator)
+    assert res2.exists()
+    gltf2 = pygltflib.GLTF2().load(str(out_file2))
+    assert len(gltf2.animations) == 2
+    assert gltf2.animations[0].name == "Clip1"
+    assert gltf2.animations[1].name == "Clip2"
