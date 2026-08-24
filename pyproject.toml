@@ -17,7 +17,6 @@ dependencies = [
     "torchvision==0.21.0",
     "transformers>=5.9.0",
     "trimesh[easy]>=4.12.2",
-    "pytorch3d==0.7.9",
     "bpy>=4.4.0",
     "open3d>=0.19.0",
     "pymeshlab>=2025.7.post1",
@@ -40,17 +39,13 @@ explicit = true
 torch = { index = "pytorch" }
 torchvision = { index = "pytorch" }
 
-pytorch3d = [
-    { url = "https://github.com/MiroPsota/torch_packages_builder/releases/download/pytorch3d-0.7.9/pytorch3d-0.7.9+pt2.6.0cu124-cp311-cp311-linux_x86_64.whl", marker = "python_version == '3.11'" },
-    { url = "https://github.com/MiroPsota/torch_packages_builder/releases/download/pytorch3d-0.7.9/pytorch3d-0.7.9+pt2.6.0cu124-cp312-cp312-linux_x86_64.whl", marker = "python_version == '3.12'" },
-    { url = "https://github.com/MiroPsota/torch_packages_builder/releases/download/pytorch3d-0.7.9/pytorch3d-0.7.9+pt2.6.0cu124-cp313-cp313-linux_x86_64.whl", marker = "python_version == '3.13'" }
-]
-
 [dependency-groups]
 dev = [
     "beartype>=0.22.9",
     "ipykernel>=7.3.0",
     "ipywidgets>=8.1.8",
+    "matplotlib>=3.10.0",
+    "plotly>=6.0.0",
     "pre-commit>=4.6.0",
     "pyright>=1.1.411",
     "pytest>=9.1.1",
