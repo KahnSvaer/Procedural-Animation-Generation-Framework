@@ -14,94 +14,21 @@ References
 
 import trimesh
 import numpy as np
-from scipy.sparse import coo_matrix, diags
+from scipy.sparse import diags
 from scipy.sparse.linalg import spsolve
 import heapq
 
 
-def triangle_areas(vertices, faces):
-    """
-    Compute the area of every triangle.
+from animgen.utils.mesh import (
+    triangle_areas,
+    vertex_areas,
+    compute_cotangent_laplacian,
+)
 
-    Parameters
-    ----------
-    vertices : (N, 3) ndarray
-    faces : (M, 3) ndarray
-
-    Returns
-    -------
-    areas : (M,) ndarray
-    """
-    v0 = vertices[faces[:, 0]]
-    v1 = vertices[faces[:, 1]]
-    v2 = vertices[faces[:, 2]]
-
-    cross = np.cross(v1 - v0, v2 - v0)
-    return 0.5 * np.linalg.norm(cross, axis=1)
-
-
-def vertex_areas(vertices, faces):
-    """
-    Compute one-third barycentric area for every vertex.
-
-    Parameters
-    ----------
-    vertices : (N, 3) ndarray
-    faces : (M, 3) ndarray
-
-    Returns
-    -------
-    areas : (N,) ndarray
-    """
-    face_areas = triangle_areas(vertices, faces)
-    v_areas = np.zeros(len(vertices), dtype=np.float64)
-
-    np.add.at(v_areas, faces[:, 0], face_areas / 3.0)
-    np.add.at(v_areas, faces[:, 1], face_areas / 3.0)
-    np.add.at(v_areas, faces[:, 2], face_areas / 3.0)
-
-    return v_areas
-
-
-def cotangent(u, v):
-    """
-    Compute cot(theta) between vectors u and v.
-    """
-    cross = np.cross(u, v)
-    cross_norm = np.linalg.norm(cross, axis=-1)
-    dot = np.sum(u * v, axis=-1)
-    cot_val = dot / np.maximum(cross_norm, 1e-12)
-    return np.clip(cot_val, -1e4, 1e4)
-
-
-def cotangent_laplacian(vertices, faces):
-    """
-    Compute cotangent-weighted Laplace-Beltrami operator.
-    """
-    n = len(vertices)
-
-    v0 = vertices[faces[:, 0]]
-    v1 = vertices[faces[:, 1]]
-    v2 = vertices[faces[:, 2]]
-
-    cot0 = cotangent(v1 - v0, v2 - v0)
-    cot1 = cotangent(v2 - v1, v0 - v1)
-    cot2 = cotangent(v0 - v2, v1 - v2)
-
-    i = faces[:, 0]
-    j = faces[:, 1]
-    k = faces[:, 2]
-
-    rows = np.concatenate([i, j, j, k, k, i])
-    cols = np.concatenate([j, i, k, j, i, k])
-
-    data = 0.5 * np.concatenate([cot2, cot2, cot0, cot0, cot1, cot1])
-
-    L = coo_matrix((data, (rows, cols)), shape=(n, n)).tocsr()
-    diag = np.asarray(L.sum(axis=1)).ravel()
-    L = L - diags(diag)
-
-    return L
+# Alias for backward compatibility
+cotangent_laplacian = lambda vertices, faces: compute_cotangent_laplacian(  # noqa: E731
+    vertices, faces, return_mass_matrix=False
+)
 
 
 def contraction_step(vertices, faces, WL, WH, use_pytorch=False, device=None):
@@ -110,7 +37,6 @@ def contraction_step(vertices, faces, WL, WH, use_pytorch=False, device=None):
     """
     L = cotangent_laplacian(vertices, faces)
 
-    # Weight matrices
     WL2 = diags(WL**2)
     WH2 = diags(WH**2)
 
@@ -159,7 +85,6 @@ def contract_mesh(
     F = faces.copy()
     N = len(V)
 
-    # Bounding box diagonal scale S
     bbox_diag = np.linalg.norm(V.max(axis=0) - V.min(axis=0))
     if bbox_diag < 1e-12:
         bbox_diag = 1.0
@@ -273,12 +198,10 @@ def compute_collapse_cost(i, j, vertices, vertex_neighbors, Q):
     """
     Computes total collapse cost F(i, j) = wa * Fa(i, j) + wb * Fb(i, j).
     """
-    # 1. Shape Cost (Fa)
     Q_sum = Q[i] + Q[j]
     p_j = np.append(vertices[j], 1.0)
     F_a = p_j.T @ Q_sum @ p_j
 
-    # 2. Sampling Cost (Fb)
     dist_ij = np.linalg.norm(vertices[i] - vertices[j])
     sum_dist_ik = sum(
         np.linalg.norm(vertices[i] - vertices[k]) for k in vertex_neighbors[i]
@@ -334,7 +257,6 @@ def connectivity_surgery(
         vertex_neighbors[f[2]].add(f[0])
         vertex_neighbors[f[2]].add(f[1])
 
-    # Initialize error matrices Q_i
     Q = {}
     for v in range(num_vertices):
         Q[v] = np.zeros((4, 4))
@@ -343,10 +265,8 @@ def connectivity_surgery(
                 contracted_vertices[v], contracted_vertices[neighbor]
             )
 
-    # DSU to track skeleton-mesh mapping
     parent = list(range(num_vertices))
 
-    # Initialize heap with edge collapses
     heap = []
     for u in range(num_vertices):
         for v in vertex_neighbors[u]:
@@ -379,7 +299,6 @@ def connectivity_surgery(
             heapq.heappush(heap, (current_cost, i, j))
             continue
 
-        # Perform collapse i -> j
         parent[i] = j
 
         # Update faces
@@ -408,14 +327,11 @@ def connectivity_surgery(
 
         vertex_neighbors[j].discard(i)
 
-        # Delete vertex i
         del vertex_neighbors[i]
         del vertex_faces[i]
 
-        # Update Q_j
         Q[j] = Q[i] + Q[j]
 
-        # Push updated costs for neighbors of j
         for k in vertex_neighbors[j]:
             cost_kj = compute_collapse_cost(
                 k, j, contracted_vertices, vertex_neighbors, Q
@@ -426,10 +342,8 @@ def connectivity_surgery(
             )
             heapq.heappush(heap, (cost_jk, j, k))
 
-    # Remaining active vertices form skeleton nodes
     skeletal_nodes = sorted(list(vertex_neighbors.keys()))
 
-    # Build unique skeleton edges from remaining neighbor graph
     skeletal_edges = []
     for u in skeletal_nodes:
         for v in vertex_neighbors[u]:
@@ -693,7 +607,7 @@ def extract_skeleton(
     """
     Extract a 1D curve skeleton from a 3D mesh using the full Au et al. (2008) pipeline.
     """
-    # Step 1: Geometry Contraction
+    # Geometry Contraction
     contracted_vertices = contract_mesh(
         mesh.vertices,
         mesh.faces,
@@ -703,12 +617,12 @@ def extract_skeleton(
         device=device,
     )
 
-    # Step 2: Connectivity Surgery
+    # Connectivity Surgery
     skeletal_nodes, skeletal_edges, parent = connectivity_surgery(
         mesh.faces, contracted_vertices, threshold, no_1d_collapses
     )
 
-    # Step 3: Embedding Refinement & Junction Merging
+    # Embedding Refinement & Junction Merging
     if enable_embedding_refinement:
         node_positions = refine_skeleton_embedding(
             mesh.vertices,

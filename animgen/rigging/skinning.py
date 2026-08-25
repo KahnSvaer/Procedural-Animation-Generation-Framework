@@ -82,7 +82,6 @@ def solve_bone_heat_numpy(
             rounded_verts, axis=0, return_inverse=True
         )
         if len(unique_verts) < N:
-            # Build welded manifold topology for heat diffusion
             welded_faces = inverse_indices[mesh.faces]
             valid_faces = (
                 (welded_faces[:, 0] != welded_faces[:, 1])
@@ -100,13 +99,11 @@ def solve_bone_heat_numpy(
                 heat_falloff_scale=heat_falloff_scale,
                 weld_tolerance=0.0,
             )
-            # Broadcast weights back to original vertex array
             return {
                 b_id: welded_weights[b_id][inverse_indices].astype(np.float32)
                 for b_id in welded_weights
             }
 
-    # Compute Euclidean distance from each vertex to each bone segment
     bone_dists = np.zeros((N, K), dtype=np.float64)
     for k, bone in enumerate(bones):
         head = np.asarray(bone.head, dtype=np.float64)
@@ -114,7 +111,6 @@ def solve_bone_heat_numpy(
         dists, _ = dist_point_to_segment_vectorized(mesh.vertices, head, tail)
         bone_dists[:, k] = dists
 
-    # Find closest bone index and distance for each vertex
     min_k = np.argmin(bone_dists, axis=1)
     min_d = np.take_along_axis(bone_dists, min_k[:, None], axis=1).squeeze(axis=1)
 
@@ -122,7 +118,6 @@ def solve_bone_heat_numpy(
     P = np.zeros((N, K), dtype=np.float64)
     np.put_along_axis(P, min_k[:, None], 1.0, axis=1)
 
-    # Dimensionless epsilon based on mesh bounding box size
     if mesh.bounds is not None and len(mesh.vertices) > 1:
         bbox_diag = float(np.linalg.norm(mesh.bounds[1] - mesh.bounds[0]))
     else:
