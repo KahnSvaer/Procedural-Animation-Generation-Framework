@@ -25,17 +25,12 @@ from animgen.utils.mesh import (
     compute_cotangent_laplacian,
 )
 
-# Alias for backward compatibility
-cotangent_laplacian = lambda vertices, faces: compute_cotangent_laplacian(  # noqa: E731
-    vertices, faces, return_mass_matrix=False
-)
-
 
 def contraction_step(vertices, faces, WL, WH, use_pytorch=False, device=None):
     """
     Perform one geometry contraction step using SciPy or PyTorch sparse solver.
     """
-    L = cotangent_laplacian(vertices, faces)
+    L = compute_cotangent_laplacian(vertices, faces)
 
     WL2 = diags(WL**2)
     WH2 = diags(WH**2)

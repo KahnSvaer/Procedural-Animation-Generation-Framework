@@ -52,7 +52,6 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "accelerate" },
-    { name = "bpy" },
     { name = "igraph" },
     { name = "jaxtyping" },
     { name = "numpy" },
@@ -76,6 +75,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "beartype" },
+    { name = "bpy" },
     { name = "ipykernel" },
     { name = "ipywidgets" },
     { name = "matplotlib" },
@@ -91,7 +91,6 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "accelerate", specifier = ">=1.13.0" },
-    { name = "bpy", specifier = ">=4.4.0" },
     { name = "igraph", specifier = ">=1.0.0" },
     { name = "jaxtyping", specifier = ">=0.3.11" },
     { name = "numpy", specifier = ">=1.26.4,<2.0.0" },
@@ -115,6 +114,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "beartype", specifier = ">=0.22.9" },
+    { name = "bpy", specifier = ">=4.4.0" },
     { name = "ipykernel", specifier = ">=7.3.0" },
     { name = "ipywidgets", specifier = ">=8.1.8" },
     { name = "matplotlib", specifier = ">=3.10.0" },

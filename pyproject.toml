@@ -17,7 +17,6 @@ dependencies = [
     "torchvision==0.21.0",
     "transformers>=5.9.0",
     "trimesh[easy]>=4.12.2",
-    "bpy>=4.4.0",
     "open3d>=0.19.0",
     "pymeshlab>=2025.7.post1",
     "igraph>=1.0.0",
@@ -42,6 +41,7 @@ torchvision = { index = "pytorch" }
 [dependency-groups]
 dev = [
     "beartype>=0.22.9",
+    "bpy>=4.4.0",
     "ipykernel>=7.3.0",
     "ipywidgets>=8.1.8",
     "matplotlib>=3.10.0",

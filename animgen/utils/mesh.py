@@ -13,7 +13,7 @@ References
        Proceedings of the 22nd annual conference on Computer graphics and interactive techniques, 351-358.
 """
 
-from typing import Optional, Union, overload
+from typing import Literal, Optional, Union, overload
 import numpy as np
 import scipy.sparse as sp
 import trimesh
@@ -38,8 +38,12 @@ def duplicate_verts(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
     faces = np.arange(0, verts.shape[0])
     faces = faces.reshape(-1, 3)
     try:
-        face_colors = mesh.visual.face_colors
-    except (AttributeError, ValueError, IndexError):
+        face_colors = getattr(mesh.visual, "face_colors", None)
+        if face_colors is None:
+            face_colors = np.full(
+                (len(mesh.faces), 4), [200, 200, 200, 255], dtype=np.uint8
+            )
+    except Exception:
         face_colors = np.full(
             (len(mesh.faces), 4), [200, 200, 200, 255], dtype=np.uint8
         )
@@ -189,18 +193,26 @@ def dist_point_to_segment_vectorized(
 
 @overload
 def compute_cotangent_laplacian(
-    mesh_or_vertices: trimesh.Trimesh,
-    faces: None = None,
-    return_mass_matrix: bool = False,
-) -> Union[sp.csr_matrix, tuple[sp.csr_matrix, sp.csr_matrix]]: ...
+    mesh_or_vertices: Union[trimesh.Trimesh, np.ndarray],
+    faces: Optional[np.ndarray] = None,
+    return_mass_matrix: Literal[False] = False,
+) -> sp.csr_matrix: ...
 
 
 @overload
 def compute_cotangent_laplacian(
-    mesh_or_vertices: np.ndarray,
-    faces: np.ndarray,
-    return_mass_matrix: bool = False,
-) -> Union[sp.csr_matrix, tuple[sp.csr_matrix, sp.csr_matrix]]: ...
+    mesh_or_vertices: Union[trimesh.Trimesh, np.ndarray],
+    faces: Optional[np.ndarray],
+    return_mass_matrix: Literal[True],
+) -> tuple[sp.csr_matrix, sp.csr_matrix]: ...
+
+
+@overload
+def compute_cotangent_laplacian(
+    mesh_or_vertices: Union[trimesh.Trimesh, np.ndarray],
+    *,
+    return_mass_matrix: Literal[True],
+) -> tuple[sp.csr_matrix, sp.csr_matrix]: ...
 
 
 def compute_cotangent_laplacian(
@@ -239,9 +251,10 @@ def compute_cotangent_laplacian(
 
     N = len(V)
     if len(F) == 0:
-        L_empty = sp.csr_matrix((N, N), dtype=np.float64)
+        L_empty: sp.csr_matrix = sp.csr_matrix((N, N), dtype=float)
         if return_mass_matrix:
-            return L_empty, sp.eye(N, dtype=np.float64, format="csr")
+            M_empty: sp.csr_matrix = sp.csr_matrix(sp.eye(N, dtype=float, format="csr"))
+            return L_empty, M_empty
         return L_empty
 
     v0 = V[F[:, 0]]
@@ -278,7 +291,9 @@ def compute_cotangent_laplacian(
 
     W_sp = sp.coo_matrix((-W, (row_indices, col_indices)), shape=(N, N)).tocsr()
     diag = -np.array(W_sp.sum(axis=1)).flatten()
-    L = W_sp + sp.diags(diag, 0, shape=(N, N), format="csr")
+    L: sp.csr_matrix = sp.csr_matrix(
+        W_sp + sp.diags(diag, 0, shape=(N, N), format="csr")
+    )
 
     if not return_mass_matrix:
         return L
@@ -291,6 +306,6 @@ def compute_cotangent_laplacian(
 
     mean_area = float(np.mean(M_diag[M_diag > 0])) if np.any(M_diag > 0) else 1.0
     M_diag = np.maximum(M_diag, mean_area * 1e-6)
-    M = sp.diags(M_diag, 0, shape=(N, N), format="csr")
+    M: sp.csr_matrix = sp.csr_matrix(sp.diags(M_diag, 0, shape=(N, N), format="csr"))
 
     return L, M

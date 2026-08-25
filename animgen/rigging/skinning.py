@@ -31,11 +31,6 @@ from animgen.utils.mesh import (
     dist_point_to_segment_vectorized,
 )
 
-# Alias for backward compatibility
-compute_robust_cotangent_laplacian = lambda mesh: compute_cotangent_laplacian(  # noqa: E731
-    mesh, return_mass_matrix=True
-)
-
 
 def solve_bone_heat_numpy(
     mesh: trimesh.Trimesh,
@@ -114,7 +109,6 @@ def solve_bone_heat_numpy(
     min_k = np.argmin(bone_dists, axis=1)
     min_d = np.take_along_axis(bone_dists, min_k[:, None], axis=1).squeeze(axis=1)
 
-    # Boundary heat source matrix P: 1 at nearest bone, 0 elsewhere
     P = np.zeros((N, K), dtype=np.float64)
     np.put_along_axis(P, min_k[:, None], 1.0, axis=1)
 
@@ -125,7 +119,7 @@ def solve_bone_heat_numpy(
     eps = max((bbox_diag * 1e-3) ** 2, 1e-8)
 
     try:
-        L, M = compute_robust_cotangent_laplacian(mesh)
+        L, M = compute_cotangent_laplacian(mesh, return_mass_matrix=True)
 
         # Pinocchio / Blender heat conduction operator:
         # H_ii = heat_falloff_scale / max(min_d(v)^2, eps)
@@ -157,108 +151,9 @@ def solve_bone_heat_numpy(
     return {bones[k].id: W[:, k].astype(np.float32) for k in range(K)}
 
 
-def compute_auto_skin_weights_blender(
-    mesh: trimesh.Trimesh,
-    armature: Armature,
-) -> dict[str, np.ndarray]:
-    """
-    Computes automatic skinning weights using Blender's ARMATURE_AUTO operator.
-    Requires 'bpy' installed.
-    """
-    try:
-        import bpy
-    except ImportError as e:
-        raise ImportError(
-            "Blender ('bpy') is required for Blender-based skinning weights. "
-            "Please ensure bpy is installed in your python environment."
-        ) from e
-
-    # Reset / clear scene objects in Blender
-    bpy.ops.object.select_all(action="SELECT")
-    bpy.ops.object.delete()
-
-    for col in (
-        bpy.data.meshes,
-        bpy.data.armatures,
-        bpy.data.materials,
-        bpy.data.objects,
-    ):
-        for block in list(col):
-            if block.users == 0:
-                col.remove(block)
-
-    mesh_data = bpy.data.meshes.new("TempSkinMesh")
-    mesh_data.from_pydata(mesh.vertices.tolist(), [], mesh.faces.tolist())
-    mesh_data.update()
-    mesh_obj = bpy.data.objects.new("TempSkinMesh", mesh_data)
-    bpy.context.collection.objects.link(mesh_obj)
-
-    arm_data = bpy.data.armatures.new("TempSkinArmature")
-    arm_obj = bpy.data.objects.new("TempSkinArmature", arm_data)
-    bpy.context.collection.objects.link(arm_obj)
-
-    bpy.context.view_layer.objects.active = arm_obj
-    bpy.ops.object.mode_set(mode="EDIT")
-
-    edit_bones = {}
-    for bone in armature.bones_list:
-        eb = arm_data.edit_bones.new(bone.id)
-        eb.head = tuple(bone.head)
-        eb.tail = tuple(bone.tail)
-        edit_bones[bone.id] = eb
-
-    for bone in armature.bones_list:
-        if bone.parent is not None:
-            eb = edit_bones[bone.id]
-            eb.parent = edit_bones[bone.parent.id]
-            eb.use_connect = bone.is_connected_to_parent
-
-    bpy.ops.object.mode_set(mode="OBJECT")
-
-    # Parent mesh to armature using Blender automatic weighting
-    bpy.ops.object.select_all(action="DESELECT")
-    mesh_obj.select_set(True)
-    arm_obj.select_set(True)
-    bpy.context.view_layer.objects.active = arm_obj
-
-    try:
-        bpy.ops.object.parent_set(type="ARMATURE_AUTO")
-    except Exception:
-        bpy.ops.object.parent_set(type="ARMATURE_ENVELOPE")
-
-    num_verts = len(mesh.vertices)
-    bone_ids = [bone.id for bone in armature.bones_list]
-    weights_dict = {b_id: np.zeros(num_verts, dtype=np.float32) for b_id in bone_ids}
-
-    vg_idx_to_name = {vg.index: vg.name for vg in mesh_obj.vertex_groups}
-    for v_idx, v in enumerate(mesh_obj.data.vertices):
-        for g in v.groups:
-            if g.group in vg_idx_to_name:
-                b_name = vg_idx_to_name[g.group]
-                if b_name in weights_dict:
-                    weights_dict[b_name][v_idx] = g.weight
-
-    # Clean up Blender datablocks
-    bpy.ops.object.select_all(action="SELECT")
-    bpy.ops.object.delete()
-
-    for col in (
-        bpy.data.meshes,
-        bpy.data.armatures,
-        bpy.data.materials,
-        bpy.data.objects,
-    ):
-        for block in list(col):
-            if block.users == 0:
-                col.remove(block)
-
-    return weights_dict
-
-
 def compute_auto_skin_weights(
     mesh: Union[trimesh.Trimesh, trimesh.Scene],
     armature: Armature,
-    use_blender: bool = False,
 ) -> dict[str, np.ndarray]:
     """
     Computes automatic skinning weights for each vertex and bone using
@@ -270,9 +165,6 @@ def compute_auto_skin_weights(
         The 3D model geometry.
     armature : Armature
         The armature hierarchy.
-    use_blender : bool
-        If True and bpy is installed, computes weights using Blender's ARMATURE_AUTO.
-        Defaults to False (pure NumPy/SciPy Bone Heat solver).
 
     Returns
     -------
@@ -291,16 +183,12 @@ def compute_auto_skin_weights(
             "An Armature with at least one bone must be provided for skinning."
         )
 
-    if use_blender:
-        return compute_auto_skin_weights_blender(mesh, armature)
-
     return solve_bone_heat_numpy(mesh, armature)
 
 
 def get_skinning_weight_matrix(
     mesh: Union[trimesh.Trimesh, trimesh.Scene],
     armature: Armature,
-    use_blender: bool = False,
 ) -> tuple[np.ndarray, list[str]]:
     """
     Computes automatic skinning weights and returns them as a 2D matrix (num_vertices, num_bones).
@@ -311,8 +199,6 @@ def get_skinning_weight_matrix(
         The 3D geometry mesh.
     armature : Armature
         The armature hierarchy.
-    use_blender : bool
-        If True, use Blender ARMATURE_AUTO backend.
 
     Returns
     -------
@@ -320,7 +206,7 @@ def get_skinning_weight_matrix(
         A 2D numpy array of shape (num_vertices, num_bones) with dtype float32,
         and the list of bone IDs corresponding to each column.
     """
-    weights_dict = compute_auto_skin_weights(mesh, armature, use_blender=use_blender)
+    weights_dict = compute_auto_skin_weights(mesh, armature)
     bone_ids = list(weights_dict.keys())
     matrix = np.column_stack([weights_dict[b_id] for b_id in bone_ids])
     return matrix, bone_ids

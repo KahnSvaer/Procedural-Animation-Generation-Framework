@@ -1,10 +1,9 @@
+from typing import Any, List, Union
 import numpy as np
-import trimesh
 import torch
-from typing import Union, List, Any
+import trimesh
 
 from animgen.core.spline import Spline
-from animgen.utils.math import rotation_matrix_from_vectors
 
 
 def build_bishop_frame(
@@ -181,165 +180,16 @@ def deform_mesh_to_spine_numpy(
     return deformed_mesh
 
 
-def deform_mesh_to_spine_bpy(
-    mesh: trimesh.Trimesh,
-    source_spine: np.ndarray,
-    target_spine: np.ndarray,
-) -> trimesh.Trimesh:
-    """
-    Deform a mesh using Blender's Armature modifier (Linear Blend Skinning / LBS) via bpy.
-    """
-    try:
-        import bpy
-
-        # pyrefly: ignore [missing-import] # This is prepackaged with blender bpy module and autoimportable once bpy is imported
-        import mathutils
-    except ImportError as e:
-        raise ImportError(
-            "Blender ('bpy') and 'mathutils' modules are required to use the BPY backend. "
-            "Please run this code inside Blender's python environment."
-        ) from e
-
-    N_points = len(source_spine)
-    if N_points < 2:
-        raise ValueError("Spine must have at least 2 points to define segments.")
-
-    # 1. Compute vertex weights using optimized numpy binning
-    A_src = source_spine[:-1]
-    D_src = source_spine[1:] - source_spine[:-1]
-    L2_src = np.sum(D_src**2, axis=1)
-    L2_src = np.maximum(L2_src, 1e-12)
-
-    disp = mesh.vertices[:, None, :] - A_src[None, :, :]
-    dot = np.sum(disp * D_src[None, :, :], axis=2)
-    t_val = np.clip(dot / L2_src[None, :], 0.0, 1.0)
-    proj = A_src[None, :, :] + t_val[:, :, None] * D_src[None, :, :]
-    dist2 = np.sum((mesh.vertices[:, None, :] - proj) ** 2, axis=2)
-    closest_seg = np.argmin(dist2, axis=1)
-    t_star = t_val[np.arange(len(mesh.vertices)), closest_seg]
-
-    bins = np.linspace(0.0, 1.0, 21)
-    bin_indices = np.digitize(t_star, bins) - 1
-
-    # 2. Setup temporary Blender Armature and Mesh Objects
-    arm_data = bpy.data.armatures.new("TempDeformArm")
-    arm_obj = bpy.data.objects.new("TempDeformArm", arm_data)
-    bpy.context.collection.objects.link(arm_obj)
-
-    mesh_data = bpy.data.meshes.new("TempDeformMesh")
-    mesh_obj = bpy.data.objects.new("TempDeformMesh", mesh_data)
-    bpy.context.collection.objects.link(mesh_obj)
-
-    try:
-        # Create Edit Bones matching the source spine
-        bpy.context.view_layer.objects.active = arm_obj
-        bpy.ops.object.mode_set(mode="EDIT")
-
-        for i in range(N_points - 1):
-            bone = arm_data.edit_bones.new(f"Bone_{i}")
-            bone.head = source_spine[i].tolist()
-            bone.tail = source_spine[i + 1].tolist()
-            if i > 0:
-                bone.parent = arm_data.edit_bones[f"Bone_{i - 1}"]
-                bone.use_connect = True
-
-        bpy.ops.object.mode_set(mode="OBJECT")
-
-        # Load mesh vertices and faces
-        mesh_data.from_pydata(mesh.vertices.tolist(), [], mesh.faces.tolist())
-        mesh_data.update()
-
-        # Create Vertex Groups and assign weights
-        vgs = [
-            mesh_obj.vertex_groups.new(name=f"Bone_{i}") for i in range(N_points - 1)
-        ]
-        for i in range(N_points - 1):
-            mask_seg = closest_seg == i
-            if not np.any(mask_seg):
-                continue
-            if i < N_points - 2:
-                for b_idx in range(len(bins)):
-                    mask_bin = (bin_indices == b_idx) & mask_seg
-                    indices = np.where(mask_bin)[0]
-                    if len(indices) == 0:
-                        continue
-                    w_next = float(bins[b_idx])
-                    w_curr = 1.0 - w_next
-                    if w_curr > 0.0:
-                        vgs[i].add(indices.tolist(), w_curr, "REPLACE")
-                    if w_next > 0.0:
-                        vgs[i + 1].add(indices.tolist(), w_next, "REPLACE")
-            else:
-                indices = np.where(mask_seg)[0]
-                vgs[i].add(indices.tolist(), 1.0, "REPLACE")
-
-        # Add Armature Modifier
-        mod = mesh_obj.modifiers.new(name="Arm", type="ARMATURE")
-        mod.object = arm_obj
-        mod.use_vertex_groups = True
-
-        # Apply target matrices in Pose Mode using relative rotations
-        bpy.context.view_layer.objects.active = arm_obj
-        bpy.ops.object.mode_set(mode="POSE")
-
-        for i in range(N_points - 1):
-            pb = arm_obj.pose.bones[f"Bone_{i}"]
-
-            T_src = source_spine[i + 1] - source_spine[i]
-            T_tgt = target_spine[i + 1] - target_spine[i]
-            R_diff = rotation_matrix_from_vectors(T_src, T_tgt)
-
-            M_bind = np.array(pb.bone.matrix_local)
-            R_bind = M_bind[:3, :3]
-            R_pose = R_diff @ R_bind
-
-            M = np.eye(4)
-            M[:3, :3] = R_pose
-            M[:3, 3] = target_spine[i]
-            pb.matrix = mathutils.Matrix(M.tolist())
-
-        bpy.ops.object.mode_set(mode="OBJECT")
-
-        # Get deformed vertices from Evaluated Mesh
-        dg = bpy.context.evaluated_depsgraph_get()
-        eval_mesh_obj = mesh_obj.evaluated_get(dg)
-        eval_mesh = eval_mesh_obj.to_mesh()
-
-        new_vertices = np.array([v.co for v in eval_mesh.vertices])
-        eval_mesh_obj.to_mesh_clear()
-
-    finally:
-        # Clean up temporary datablocks and objects
-        if mesh_obj.name in bpy.data.objects:
-            bpy.data.objects.remove(mesh_obj, do_unlink=True)
-        if arm_obj.name in bpy.data.objects:
-            bpy.data.objects.remove(arm_obj, do_unlink=True)
-        if mesh_data.name in bpy.data.meshes:
-            bpy.data.meshes.remove(mesh_data, do_unlink=True)
-        if arm_data.name in bpy.data.armatures:
-            bpy.data.armatures.remove(arm_data, do_unlink=True)
-
-    straightened_mesh = mesh.copy()
-    straightened_mesh.vertices = new_vertices
-    return straightened_mesh
-
-
 def deform_mesh_to_spine(
     mesh: trimesh.Trimesh,
     source_spine: np.ndarray,
     target_spine: np.ndarray,
-    backend: str = "numpy",
     chunk_size: int = 10000,
 ) -> trimesh.Trimesh:
     """
-    Dispatcher to deform a mesh to a target spine using either the 'numpy' or 'bpy' backend.
+    Deforms a mesh from a source spine to a target spine using Bishop parallel transport frames.
     """
-    if backend == "numpy":
-        return deform_mesh_to_spine_numpy(mesh, source_spine, target_spine, chunk_size)
-    elif backend == "bpy":
-        return deform_mesh_to_spine_bpy(mesh, source_spine, target_spine)
-    else:
-        raise ValueError(f"Unknown backend: {backend}. Must be 'numpy' or 'bpy'.")
+    return deform_mesh_to_spine_numpy(mesh, source_spine, target_spine, chunk_size)
 
 
 def straighten(
@@ -347,7 +197,6 @@ def straighten(
     spine_points: Union[np.ndarray, torch.Tensor, List[Any], Spline],
     num_segments: int | None = None,
     axis: str = "z",
-    backend: str = "numpy",
 ) -> trimesh.Trimesh:
     """
     Straighten a curved mesh by mapping its vertices from the local coordinate frames of a curved
@@ -364,8 +213,6 @@ def straighten(
         The number of interpolation points to use along the spine.
     axis : str
         The axis along which to straighten the mesh ('x', 'y', or 'z').
-    backend : str
-        The deformation backend to use ('numpy' or 'bpy').
 
     Returns
     -------
@@ -412,7 +259,7 @@ def straighten(
     else:
         raise ValueError(f"Unknown axis: {axis}. Must be 'x', 'y', or 'z'.")
 
-    return deform_mesh_to_spine(mesh, spine_pts_np, target_spine, backend=backend)
+    return deform_mesh_to_spine(mesh, spine_pts_np, target_spine)
 
 
 def straighten_lateral(
@@ -420,7 +267,6 @@ def straighten_lateral(
     spine_points: Union[np.ndarray, torch.Tensor, List[Any], Spline],
     num_segments: int | None = None,
     straighten_axis: str = "x",
-    backend: str = "numpy",
 ) -> trimesh.Trimesh:
     """
     Straighten a curved mesh along a specific lateral axis (e.g., left-right / X axis),
@@ -437,8 +283,6 @@ def straighten_lateral(
         The number of interpolation points to use along the spine.
     straighten_axis : str
         The lateral coordinate axis to flatten ('x', 'y', or 'z').
-    backend : str
-        The deformation backend to use ('numpy' or 'bpy').
 
     Returns
     -------
@@ -485,4 +329,4 @@ def straighten_lateral(
             f"Unknown straighten_axis: {straighten_axis}. Must be 'x', 'y', or 'z'."
         )
 
-    return deform_mesh_to_spine(mesh, spine_pts_np, target_spine, backend=backend)
+    return deform_mesh_to_spine(mesh, spine_pts_np, target_spine)
