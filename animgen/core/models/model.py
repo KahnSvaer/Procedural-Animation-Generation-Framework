@@ -18,21 +18,50 @@ class BaseModelClass:
         else:
             self.mesh: trimesh.Trimesh = mesh
         self.mesh = self._preprocess(self.mesh)
-        self.renderer = self._set_renderer(1024, 1024)
-        self.views_output = self._get_views(
-            camera_generation_method="dodecahedron",
-            renderer_args={
-                "return_colored": False,
-            },
-            sampling_args={
-                "radius": 1.5,
-            },
-        )
+        self._renderer: Optional[Renderer] = None
+        self._views_output: Optional[dict[str, Any]] = None
         self.adj_graph = self.mesh.face_adjacency
 
         self.armature: Optional[Armature] = None
         self.animator: Optional[Animator] = None
         self.skin_weights: Optional[dict[str, np.ndarray]] = None
+
+    @property
+    def renderer(self) -> Renderer:
+        if self._renderer is None:
+            self._renderer = self._set_renderer(1024, 1024)
+        return self._renderer
+
+    @property
+    def views_output(self) -> dict[str, Any]:
+        if self._views_output is None:
+            self._views_output = self._get_views(
+                camera_generation_method="dodecahedron",
+                renderer_args={
+                    "return_colored": False,
+                },
+                sampling_args={
+                    "radius": 1.5,
+                },
+            )
+        return self._views_output
+
+    @views_output.setter
+    def views_output(self, value: dict[str, Any]) -> None:
+        """
+        Setter for testing purposes.
+        """
+        self._views_output = value
+
+    def clear_renders(self, delete_renderer: bool = True) -> None:
+        """
+        Clears cached multi-view render outputs and optionally releases the
+        underlying offscreen renderer to free RAM and OpenGL VRAM.
+        """
+        self._views_output = None
+        if delete_renderer and self._renderer is not None:
+            self._renderer.delete()
+            self._renderer = None
 
     @property
     def vertices(self) -> np.ndarray:

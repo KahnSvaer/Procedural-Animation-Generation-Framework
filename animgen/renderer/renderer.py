@@ -101,6 +101,17 @@ class Renderer:
             "barycnt": BarycentricShaderCache(),
         }
 
+    def delete(self):
+        """
+        Releases the underlying pyrender offscreen renderer and OpenGL context.
+        """
+        if hasattr(self, "renderer") and self.renderer is not None:
+            try:
+                self.renderer.delete()
+            except Exception:
+                pass
+            self.renderer = None
+
     def set_object(self, source: trimesh.Trimesh | str | Path, smooth=False):
         """ """
         source = load_model(source) if isinstance(source, (str, Path)) else source
@@ -144,6 +155,9 @@ class Renderer:
 
         def render_shader(shader: str, scene):
             """ """
+            assert self.renderer is not None, (
+                "Renderer has been deleted or not initialized."
+            )
             self.renderer._renderer._program_cache = self.shaders[shader]
             return self.renderer.render(scene)
 
