@@ -4,13 +4,13 @@
 
 ### Milestone 0: 3D Foundational Model import to Unity Application
 Demonstrates the import of 3D models into Unity applications.
+* [Demo Video](assets/demo_videos/FrontEndDemoCompleteStaticSite.mp4)
 
-<video src="assets/demo_videos/FrontEndDemoCompleteStaticSite.mp4" controls="controls" width="100%"></video>
+---
 
 ### Milestone 1: Point to Spline to Armature Generation
 Demonstrates the extraction and conversion of discrete spatial point clusters into continuous centripetal Catmull-Rom splines and hierarchical skeletal armatures.
-
-<video src="assets/demo_videos/PointToSplineToArmatureDemo.mp4" controls="controls" width="100%"></video>
+* [Demo Video](assets/demo_videos/PointToSplineToArmatureDemo.mp4)
 
 ---
 
@@ -18,17 +18,17 @@ Demonstrates the extraction and conversion of discrete spatial point clusters in
 Demonstrates zero-shot vision foundation model (SAM3) and Shape Diameter Function (SDF) segmentation to identify and partition anatomical mesh appendages (dorsal fins, caudal tails).
 
 #### 2.1 Dorsal Fin Segmentation
-<video src="assets/demo_videos/Mesh-Segmentation-Demo/Dorsal-Fin-Segmentation.mp4" controls="controls" width="100%"></video>
+* [Demo Video](assets/demo_videos/Mesh-Segmentation-Demo/Dorsal-Fin-Segmentation.mp4)
 
 #### 2.2 Tail / Caudal Fin Segmentation
-<video src="assets/demo_videos/Mesh-Segmentation-Demo/Tail-Segmentation.mp4" controls="controls" width="100%"></video>
+* [Demo Video](assets/demo_videos/Mesh-Segmentation-Demo/Tail-Segmentation.mp4)
 
 ---
 
 ### Milestone 3: Procedural Wave Animation & Mesh Skinning
 Demonstrates procedural wave kinematics (travelling and standing wave generators) driving skeletal chains with real-time Dual Quaternion Skinning (DQS) mesh deformation without any coupling with blender.
 
-<video src="assets/demo_videos/Animation_Cylinder_Demo.mp4" controls="controls" width="100%"></video>
+[![Animation Demo](assets/demo_videos/Animation_Cylinder_Demo.gif)](assets/demo_videos/Animation_Cylinder_Demo.mp4)
 
 ---
 
