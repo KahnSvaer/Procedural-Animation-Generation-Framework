@@ -12,25 +12,18 @@ from animgen.rigging.skinning import compute_auto_skin_weights
 
 
 class BaseModelClass:
-    def __init__(self, mesh: str | Path | trimesh.Trimesh):
+    def __init__(self, mesh: str | Path | trimesh.Trimesh, renderer_size=(1024, 1024)):
         if not isinstance(mesh, trimesh.Trimesh):
             self.mesh: trimesh.Trimesh = load_model(mesh)
         else:
             self.mesh: trimesh.Trimesh = mesh
-        self.mesh = self._preprocess(self.mesh)
+        self.mesh = self.preprocess_mesh(self.mesh)
         self._renderer: Optional[Renderer] = None
         self._views_output: Optional[dict[str, Any]] = None
-        self.adj_graph = self.mesh.face_adjacency
-
         self.armature: Optional[Armature] = None
         self.animator: Optional[Animator] = None
         self.skin_weights: Optional[dict[str, np.ndarray]] = None
-
-    @property
-    def renderer(self) -> Renderer:
-        if self._renderer is None:
-            self._renderer = self._set_renderer(1024, 1024)
-        return self._renderer
+        self.renderer_size: tuple[int, int] = renderer_size
 
     @property
     def views_output(self) -> dict[str, Any]:
@@ -41,7 +34,7 @@ class BaseModelClass:
                     "return_colored": False,
                 },
                 sampling_args={
-                    "radius": 1.5,
+                    "radius": 1.8,
                 },
             )
         return self._views_output
@@ -71,9 +64,9 @@ class BaseModelClass:
     def faces(self) -> np.ndarray:
         return self.mesh.faces
 
-    def _preprocess(self, mesh: trimesh.Trimesh):
+    def preprocess_mesh(self, mesh: trimesh.Trimesh):
         """
-        Preprocesses the mesh for rendering.
+        Preprocesses the mesh.
         """
         mesh = mesh.copy()
         center = mesh.vertices.mean(axis=0)
@@ -82,14 +75,12 @@ class BaseModelClass:
         mesh.vertices /= scale
         return mesh
 
-    def _set_renderer(
-        self, viewport_width: int = 1024, viewport_height: int = 1024
-    ) -> Renderer:
+    def _set_renderer(self) -> Renderer:
         """
         Sets up the renderer with the asset's mesh.
         """
         renderer = Renderer(
-            viewport_width=viewport_width, viewport_height=viewport_height
+            viewport_width=self.renderer_size[0], viewport_height=self.renderer_size[1]
         )
         renderer.set_object(self.mesh)
         renderer.set_camera()
@@ -105,8 +96,11 @@ class BaseModelClass:
         """
         Generates multiple views of the asset from different camera positions.
         """
+        if self._renderer is None:
+            self._renderer = self._set_renderer()
+
         output = render_multiview(
-            renderer=self.renderer,
+            renderer=self._renderer,
             camera_generation_method=camera_generation_method,
             renderer_args=renderer_args,
             sampling_args=sampling_args,
@@ -128,6 +122,8 @@ class BaseModelClass:
                 "Cannot compute skin weights: no Armature assigned to self.armature."
             )
         self.skin_weights = compute_auto_skin_weights(self.mesh, self.armature)
+        if self.animator is not None:
+            self.animator.skin_weights = self.skin_weights
         return self.skin_weights
 
     def export(

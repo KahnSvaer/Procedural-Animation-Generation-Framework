@@ -1,0 +1,84 @@
+import trimesh
+from pathlib import Path
+import copy
+from abc import ABC, abstractmethod
+
+from animgen.core.models.model import BaseModelClass
+from animgen.core.armature import Armature
+from animgen.animation.animator import Animator
+
+
+class Pipeline(ABC):
+    """
+    This is the base class pipeline for adding animations.
+    This is a base class and would need to be overloaded to create seperate pipelines.
+    """
+
+    def __init__(
+        self,
+        model: BaseModelClass,
+        prompts: list[str] | None = None,
+        prompts_embedding_path: Path | None = None,
+    ):
+        self.model = copy.deepcopy(model)
+        self.model.clear_renders(delete_renderer=True)
+
+        self.prompts = prompts
+        self.prompts_embedding_path = prompts_embedding_path
+
+        assert self.prompts is not None or self.prompts_embedding_path is not None, (
+            "Prompts or prompts embedding path must be provided"
+        )
+
+    @abstractmethod
+    def segment(self) -> dict[str, list[int]]:
+        """
+        Runs the segmentation pipeline on the model.
+
+        Returns
+        -------
+        dict[str, list[int]]
+            A dictionary mapping from body part names to face indices.
+        """
+        pass
+
+    @abstractmethod
+    def canonicalize(self, segments: dict[str, list[int]]) -> trimesh.Trimesh:
+        """
+        Runs the canonicalization pipeline on the model.
+
+        Returns
+        -------
+        trimesh.Trimesh
+            The canonicalized mesh.
+        """
+        pass
+
+    @abstractmethod
+    def rig(self, segments: dict[str, list[int]]) -> Armature:
+        """
+        Runs the rigging pipeline on the model.
+        """
+        pass
+
+    @abstractmethod
+    def animate(self) -> Animator:
+        """
+        Runs the animation pipeline on the model.
+        """
+        pass
+
+    def process(self) -> BaseModelClass:
+        """
+        Runs the complete end to end pipeline.
+        """
+        segments = self.segment()
+        mesh = self.canonicalize(segments)
+        self.model.mesh = self.model.preprocess_mesh(mesh)
+        self.model.armature = self.rig(segments)
+        self.model.animator = self.animate()
+        self.model.skin_weights = self.model.compute_skin_weights()
+        if self.model.animator is not None:
+            self.model.animator.skin_weights = self.model.skin_weights
+
+        return self.model
