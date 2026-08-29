@@ -601,31 +601,36 @@ def extract_skeleton(
 ):
     """
     Extract a 1D curve skeleton from a 3D mesh using the full Au et al. (2008) pipeline.
+    Automatically creates a welded manifold geometry copy so textured assets (with split
+    UV seam vertices) contract cleanly.
     """
-    # Geometry Contraction
+    working_mesh = trimesh.Trimesh(
+        vertices=mesh.vertices.copy(),
+        faces=mesh.faces.copy(),
+        process=True,
+    )
+
     contracted_vertices = contract_mesh(
-        mesh.vertices,
-        mesh.faces,
+        working_mesh.vertices,
+        working_mesh.faces,
         max_iters=max_iters,
         epsilon=epsilon,
         use_pytorch=use_pytorch,
         device=device,
     )
 
-    # Connectivity Surgery
     skeletal_nodes, skeletal_edges, parent = connectivity_surgery(
-        mesh.faces, contracted_vertices, threshold, no_1d_collapses
+        working_mesh.faces, contracted_vertices, threshold, no_1d_collapses
     )
 
-    # Embedding Refinement & Junction Merging
     if enable_embedding_refinement:
         node_positions = refine_skeleton_embedding(
-            mesh.vertices,
+            working_mesh.vertices,
             contracted_vertices,
             skeletal_nodes,
             skeletal_edges,
             parent,
-            mesh.faces,
+            working_mesh.faces,
         )
     else:
         node_positions = {
@@ -637,7 +642,7 @@ def extract_skeleton(
             skeletal_nodes,
             skeletal_edges,
             parent,
-            mesh.vertices,
+            working_mesh.vertices,
             node_positions,
         )
 
