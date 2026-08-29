@@ -223,6 +223,8 @@ __marimo__/
 # Custom
 models_cache/*
 !models_cache/.gitkeep
+!models_cache/fixtures
+!models_cache/fixtures/**
 temp/*
 !temp/.gitkeep
 tests/artifacts/*
