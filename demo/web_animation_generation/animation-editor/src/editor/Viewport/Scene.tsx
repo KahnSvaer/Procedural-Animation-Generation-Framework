@@ -348,7 +348,34 @@ export const Scene = () => {
         : "animgen_viewport";
       const fullFilename = `${filename}_f${targetFrame}.png`;
 
-      const dataURL = gl.domElement.toDataURL("image/png");
+      const width = gl.domElement.width;
+      const height = gl.domElement.height;
+
+      const exportCanvas = document.createElement("canvas");
+      exportCanvas.width = width;
+      exportCanvas.height = height;
+      const ctx = exportCanvas.getContext("2d");
+
+      let dataURL = "";
+      if (ctx) {
+        const cx = width * 0.5;
+        const cy = height * 0.45;
+        const radius = Math.hypot(width, height) * 0.55;
+
+        const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+        gradient.addColorStop(0, "#232730");
+        gradient.addColorStop(0.6, "#15171c");
+        gradient.addColorStop(1, "#0d0e11");
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(gl.domElement, 0, 0);
+
+        dataURL = exportCanvas.toDataURL("image/png");
+      } else {
+        dataURL = gl.domElement.toDataURL("image/png");
+      }
+
       const link = document.createElement("a");
       link.href = dataURL;
       link.download = fullFilename;
