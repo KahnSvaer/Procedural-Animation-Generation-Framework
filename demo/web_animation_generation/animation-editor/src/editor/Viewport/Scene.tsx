@@ -2,8 +2,6 @@ import { useEffect, useRef, useMemo } from "react";
 import {
   OrbitControls,
   Grid,
-  GizmoHelper,
-  GizmoViewport,
 } from "@react-three/drei";
 import { useThree, useFrame } from "@react-three/fiber";
 import { OrbitControls as OrbitControlsImpl } from "three-stdlib";
@@ -200,6 +198,8 @@ export const Scene = () => {
   const activeClipIndex = useModelStore((state) => state.activeClipIndex);
 
   const resetVersion = useCameraStore((state) => state.resetVersion);
+  const setCamera = useCameraStore((state) => state.setCamera);
+  const setControls = useCameraStore((state) => state.setControls);
   const screenshotVersion = useScreenshotStore((state) => state.screenshotVersion);
 
   const isWireframe = useViewportStore((state) => state.isWireframe);
@@ -207,6 +207,16 @@ export const Scene = () => {
   const showSkeleton = useViewportStore((state) => state.showSkeleton);
   const showGrid = useViewportStore((state) => state.showGrid);
   const showTextures = useViewportStore((state) => state.showTextures);
+
+  useEffect(() => {
+    setCamera(camera);
+  }, [camera, setCamera]);
+
+  useEffect(() => {
+    if (controlsRef.current) {
+      setControls(controlsRef.current);
+    }
+  }, [setControls]);
 
   useEffect(() => {
     controlsRef.current?.target.copy(DEFAULT_CAMERA_TARGET);
@@ -415,11 +425,7 @@ export const Scene = () => {
       )}
 
       {model && showSkeleton && <SkeletonVisualizer model={model} />}
-
-      <GizmoHelper alignment="top-right" margin={[60, 60]}>
-        <GizmoViewport />
-      </GizmoHelper>
-
+ 
       <OrbitControls
         ref={controlsRef}
         makeDefault

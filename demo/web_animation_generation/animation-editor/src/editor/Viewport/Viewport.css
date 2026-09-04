@@ -13,8 +13,8 @@
 
 .viewport-overlay-toolbar {
   position: absolute;
-  top: 116px;
-  right: 47px;
+  top: 124px;
+  right: 48px;
   z-index: 10;
   display: flex;
   flex-direction: column;
