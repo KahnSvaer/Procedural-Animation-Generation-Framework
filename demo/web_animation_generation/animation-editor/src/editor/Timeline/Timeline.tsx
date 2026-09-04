@@ -25,6 +25,13 @@ import {
 } from "lucide-react";
 import { useTimeStore } from "../../stores/timeStore";
 import { useModelStore } from "../../stores/modelStore";
+import {
+  FPS_OPTIONS,
+  PLAYBACK_SPEED_OPTIONS,
+  SUMMARY_TRACK_COLOR,
+  DEFAULT_BONE_COLOR,
+  SELECTED_KEYFRAME_COLOR,
+} from "../../constants/timelineTheme";
 
 export const Timeline: React.FC = () => {
   const {
@@ -188,9 +195,11 @@ export const Timeline: React.FC = () => {
               className="timeline-select"
               title="Frames Per Second"
             >
-              <option value={24}>24 FPS</option>
-              <option value={30}>30 FPS</option>
-              <option value={60}>60 FPS</option>
+              {FPS_OPTIONS.map((fpsVal) => (
+                <option key={fpsVal} value={fpsVal}>
+                  {fpsVal} FPS
+                </option>
+              ))}
             </select>
           </div>
 
@@ -201,11 +210,11 @@ export const Timeline: React.FC = () => {
               className="timeline-select"
               title="Playback Speed"
             >
-              <option value={0.25}>0.25x</option>
-              <option value={0.5}>0.5x</option>
-              <option value={1}>1.0x</option>
-              <option value={1.5}>1.5x</option>
-              <option value={2}>2.0x</option>
+              {PLAYBACK_SPEED_OPTIONS.map((speedVal) => (
+                <option key={speedVal} value={speedVal}>
+                  {speedVal}x
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -482,10 +491,10 @@ export const Timeline: React.FC = () => {
                             left: `${(kf.frame - startFrame) * zoom}px`,
                             backgroundColor:
                               track.type === "summary"
-                                ? "#f59e0b"
+                                ? SUMMARY_TRACK_COLOR
                                 : isSelected
-                                ? "#fbbf24"
-                                : track.color || "#38bdf8",
+                                ? SELECTED_KEYFRAME_COLOR
+                                : track.color || DEFAULT_BONE_COLOR,
                           }}
                           onClick={(e) => {
                             e.stopPropagation();

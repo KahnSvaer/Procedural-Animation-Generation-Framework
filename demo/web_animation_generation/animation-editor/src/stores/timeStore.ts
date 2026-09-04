@@ -1,5 +1,16 @@
 import { create } from "zustand";
 import { Object3D, AnimationClip, Bone, SkinnedMesh } from "three";
+import {
+  DEFAULT_START_FRAME,
+  DEFAULT_END_FRAME,
+  DEFAULT_FPS,
+  DEFAULT_ZOOM,
+  MIN_ZOOM,
+  MAX_ZOOM,
+  SUMMARY_TRACK_COLOR,
+  BONE_TRACK_COLORS,
+  CHANNEL_COLORS,
+} from "../constants/timelineTheme";
 
 export interface KeyframePoint {
   frame: number;
@@ -77,22 +88,22 @@ const DEFAULT_TRACKS: BoneTrack[] = [
     id: "summary",
     name: "Summary",
     type: "summary",
-    color: "#f59e0b",
+    color: SUMMARY_TRACK_COLOR,
     expanded: true,
     keyframes: [],
   },
 ];
 
 export const useTimeStore = create<TimeStore>((set, get) => ({
-  currentFrame: 1,
-  startFrame: 1,
-  endFrame: 120,
-  fps: 30,
+  currentFrame: DEFAULT_START_FRAME,
+  startFrame: DEFAULT_START_FRAME,
+  endFrame: DEFAULT_END_FRAME,
+  fps: DEFAULT_FPS,
   isPlaying: false,
   isLooping: true,
   playbackSpeed: 1,
 
-  zoom: 14,
+  zoom: DEFAULT_ZOOM,
   scrollLeft: 0,
   selectedBoneId: null,
   selectedKeyframe: null,
@@ -146,7 +157,7 @@ export const useTimeStore = create<TimeStore>((set, get) => ({
   goToStart: () => set((state) => ({ currentFrame: state.startFrame })),
   goToEnd: () => set((state) => ({ currentFrame: state.endFrame })),
 
-  setZoom: (zoom) => set({ zoom: Math.max(4, Math.min(60, zoom)) }),
+  setZoom: (zoom) => set({ zoom: Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom)) }),
   setScrollLeft: (scrollLeft) => set({ scrollLeft: Math.max(0, scrollLeft) }),
   setSelectedBoneId: (selectedBoneId) => set({ selectedBoneId }),
   setSelectedKeyframe: (selectedKeyframe) => set({ selectedKeyframe }),
@@ -246,7 +257,7 @@ export const useTimeStore = create<TimeStore>((set, get) => ({
 
   populateFromGLTF: (model, animations, customFps) => {
     const fps = customFps || get().fps;
-    const colors = ["#38bdf8", "#a855f7", "#ec4899", "#10b981", "#f97316", "#eab308"];
+    const colors = BONE_TRACK_COLORS;
 
     const boneMap = new Map<string, Bone>();
     model.traverse((child) => {
@@ -264,7 +275,7 @@ export const useTimeStore = create<TimeStore>((set, get) => ({
     });
 
     const activeClip = animations.length > 0 ? animations[0] : null;
-    let maxClipFrame = 120;
+    let maxClipFrame = DEFAULT_END_FRAME;
 
     if (activeClip) {
       maxClipFrame = Math.max(1, Math.ceil(activeClip.duration * fps));
@@ -304,11 +315,11 @@ export const useTimeStore = create<TimeStore>((set, get) => ({
               channelKeyframes.push({ frame });
             }
 
-            let propColor = "#3b82f6";
-            if (trackProp.includes("position")) propColor = "#ef4444";
+            let propColor: string = CHANNEL_COLORS.property;
+            if (trackProp.includes("position")) propColor = CHANNEL_COLORS.position;
             else if (trackProp.includes("quaternion") || trackProp.includes("rotation"))
-              propColor = "#3b82f6";
-            else if (trackProp.includes("scale")) propColor = "#22c55e";
+              propColor = CHANNEL_COLORS.rotation;
+            else if (trackProp.includes("scale")) propColor = CHANNEL_COLORS.scale;
 
             channels.push({
               id: `${boneName}_${trackProp}`,
@@ -344,7 +355,7 @@ export const useTimeStore = create<TimeStore>((set, get) => ({
         id: "summary",
         name: "Summary",
         type: "summary",
-        color: "#f59e0b",
+        color: SUMMARY_TRACK_COLOR,
         expanded: true,
         keyframes: sortedSummaryFrames,
       },
@@ -353,18 +364,18 @@ export const useTimeStore = create<TimeStore>((set, get) => ({
 
     set({
       tracks,
-      startFrame: 1,
+      startFrame: DEFAULT_START_FRAME,
       endFrame: maxClipFrame,
-      currentFrame: 1,
+      currentFrame: DEFAULT_START_FRAME,
     });
   },
 
   resetDefaultTracks: () =>
     set({
       tracks: DEFAULT_TRACKS,
-      startFrame: 1,
-      endFrame: 120,
-      currentFrame: 1,
+      startFrame: DEFAULT_START_FRAME,
+      endFrame: DEFAULT_END_FRAME,
+      currentFrame: DEFAULT_START_FRAME,
     }),
 }));
 
