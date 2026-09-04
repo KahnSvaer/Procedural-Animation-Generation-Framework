@@ -3,6 +3,7 @@ import "./index.css";
 import Toolbar from "./editor/Toolbar/Toolbar";
 import Viewport from "./editor/Viewport/Viewport";
 import Inspector from "./editor/Inspector/Inspector";
+import Timeline from "./editor/Timeline/Timeline";
 
 import {
   Group,
@@ -15,22 +16,29 @@ function App() {
     <div className="app">
       <Toolbar />
 
-        <Group orientation="horizontal" className="workspace">
+      <Group orientation="horizontal" className="workspace">
         <Panel defaultSize="70%">
-            <Viewport />
+          <Group orientation="vertical">
+            <Panel defaultSize="70%">
+              <Viewport />
+            </Panel>
+            <Separator className="resize-handle" />
+            <Panel defaultSize="30%" minSize="140px">
+              <Timeline />
+            </Panel>
+          </Group>
         </Panel>
 
         <Separator className="resize-handle" />
 
         <Panel
-            defaultSize="30%"
-            minSize="280px"
-            maxSize="600px"
+          defaultSize="30%"
+          minSize="280px"
+          maxSize="600px"
         >
-            <Inspector />
+          <Inspector />
         </Panel>
-        </Group>
-        
+      </Group>
     </div>
   );
 }

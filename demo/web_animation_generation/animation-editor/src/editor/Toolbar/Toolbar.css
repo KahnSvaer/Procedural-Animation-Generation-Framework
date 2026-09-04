@@ -1,0 +1,57 @@
+.toolbar {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: var(--bg-primary, #18181b);
+  border-bottom: 1px solid var(--border-color, #2e2e35);
+  user-select: none;
+  z-index: 20;
+}
+
+.toolbar-brand {
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  color: var(--text-primary, #f4f4f5);
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-ui, sans-serif);
+  background: var(--bg-surface, #27272a);
+  color: var(--text-primary, #f4f4f5);
+  border: 1px solid var(--border-color, #2e2e35);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.toolbar-btn:hover {
+  background: var(--bg-surface-hover, #323238);
+  border-color: var(--border-light, #3f3f46);
+}
+
+.toolbar-btn.primary {
+  background: var(--accent-blender, #3b82f6);
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
+.toolbar-btn.primary:hover {
+  background: #2563eb;
+}
