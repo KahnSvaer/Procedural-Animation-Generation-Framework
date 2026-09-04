@@ -23,7 +23,7 @@ const AXES: AxisDefinition[] = [
   },
   {
     id: "neg-x",
-    label: "",
+    label: "-X",
     vector: new Vector3(-1, 0, 0),
     color: "#ef4444",
     dimColor: "#991b1b",
@@ -39,7 +39,7 @@ const AXES: AxisDefinition[] = [
   },
   {
     id: "neg-y",
-    label: "",
+    label: "-Y",
     vector: new Vector3(0, -1, 0),
     color: "#22c55e",
     dimColor: "#166534",
@@ -55,7 +55,7 @@ const AXES: AxisDefinition[] = [
   },
   {
     id: "neg-z",
-    label: "",
+    label: "-Z",
     vector: new Vector3(0, 0, -1),
     color: "#3b82f6",
     dimColor: "#1e40af",
@@ -132,7 +132,7 @@ export const Gizmo: React.FC = () => {
   }, [updateProjection]);
 
   const snapToAxis = useCallback(
-    (axisVector: Vector3, label: string) => {
+    (axisVector: Vector3) => {
       if (!camera) return;
 
       if (snapAnimRef.current !== null) {
@@ -143,15 +143,21 @@ export const Gizmo: React.FC = () => {
       const target = controls ? controls.target.clone() : new Vector3(0, 0, 0);
       const dist = Math.max(1, camera.position.distanceTo(target));
       const startPos = camera.position.clone();
-      const endPos = target.clone().add(axisVector.clone().multiplyScalar(dist));
+
+      const currentDir = camera.position.clone().sub(target).normalize();
+      const isCurrentlyFocused = currentDir.dot(axisVector) > 0.92;
+      const effectiveVector = isCurrentlyFocused
+        ? axisVector.clone().negate()
+        : axisVector.clone();
+
+      const endVector = effectiveVector.clone();
+      if (Math.abs(endVector.x) < 0.0001 && Math.abs(endVector.z) < 0.0001) {
+        endVector.z = 0.0001 * (endVector.y >= 0 ? 1 : -1);
+      }
+      const endPos = target.clone().add(endVector.clone().multiplyScalar(dist));
 
       const startUp = camera.up.clone();
-      let endUp = new Vector3(0, 1, 0);
-      if (label === "Y" || (axisVector.x === 0 && axisVector.y === 1 && axisVector.z === 0)) {
-        endUp = new Vector3(0, 0, -1);
-      } else if (axisVector.x === 0 && axisVector.y === -1 && axisVector.z === 0) {
-        endUp = new Vector3(0, 0, 1);
-      }
+      const endUp = new Vector3(0, 1, 0);
 
       const startTime = performance.now();
       const duration = 280;
@@ -315,36 +321,47 @@ export const Gizmo: React.FC = () => {
 
         {projectedAxes.map((axis) => {
           const isPos = axis.isPositive;
-          const knobRadius = isPos ? 8.5 : 4;
+          const knobRadius = isPos ? 8.5 : 7;
           const knobFill = isPos
             ? axis.color
             : axis.z >= 0
-            ? axis.color
-            : axis.dimColor;
+            ? axis.dimColor
+            : "#1e293b";
 
           return (
             <g
               key={`knob-${axis.id}`}
               className="gizmo-axis-knob"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
+                e.preventDefault();
                 e.stopPropagation();
-                snapToAxis(axis.vector, axis.label);
+                snapToAxis(axis.vector);
               }}
             >
               <circle
                 cx={axis.x}
                 cy={axis.y}
+                r={12}
+                fill="transparent"
+                style={{ cursor: "pointer" }}
+              />
+              <circle
+                cx={axis.x}
+                cy={axis.y}
                 r={knobRadius}
                 fill={knobFill}
-                stroke={isPos ? "#ffffff" : "transparent"}
-                strokeWidth={isPos ? 0.75 : 0}
-                opacity={isPos ? 1 : axis.z < 0 ? 0.6 : 0.85}
+                stroke={isPos ? "#ffffff" : axis.color}
+                strokeWidth={isPos ? 0.75 : 1.2}
+                opacity={isPos ? 1 : axis.z < 0 ? 0.7 : 0.95}
               />
-              {isPos && (
-                <text x={axis.x} y={axis.y} className="gizmo-axis-text">
-                  {axis.label}
-                </text>
-              )}
+              <text
+                x={axis.x}
+                y={axis.y}
+                className={`gizmo-axis-text ${isPos ? "" : "negative"}`}
+              >
+                {axis.label}
+              </text>
             </g>
           );
         })}

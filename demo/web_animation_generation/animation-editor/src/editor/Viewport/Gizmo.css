@@ -77,3 +77,8 @@
   pointer-events: none;
   user-select: none;
 }
+
+.gizmo-axis-text.negative {
+  font-size: 6.5px;
+  opacity: 0.95;
+}
