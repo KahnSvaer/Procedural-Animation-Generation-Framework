@@ -310,7 +310,7 @@ def test_sam3_single_mesh_determinism_test_10_runs():
         mesh_path = fallback_models[0]
 
     num_iterations = 10
-    prompts = ["tail"]
+    prompts = ["tail", "fin", "head", "dorsal fin"]
     print(
         f"\n[SAM3 Determinism Test] Running {num_iterations} repeated segmentations on '{mesh_path.name}'..."
     )
