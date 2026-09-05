@@ -1,3 +1,4 @@
+import gc
 import os
 from collections import defaultdict
 from pathlib import Path
@@ -21,6 +22,37 @@ DEFAULT_FIXTURE_FOLDER = Path("./models_cache/fixtures")
 DEFAULT_FIXTURE_PATH = DEFAULT_FIXTURE_FOLDER / "sam3_text_embeddings.pt"
 
 
+def _resolve_torch_dtype(
+    device: str | torch.device,
+    dtype: torch.dtype | str | None = None,
+) -> torch.dtype:
+    """
+    Resolves the appropriate torch.dtype for SAM3 execution.
+
+    By default on CUDA, uses bfloat16 if supported (Ampere+), otherwise float16.
+    On CPU, defaults to float32.
+    """
+    if dtype is not None:
+        if isinstance(dtype, str):
+            dtype_map = {
+                "float16": torch.float16,
+                "fp16": torch.float16,
+                "bfloat16": torch.bfloat16,
+                "bf16": torch.bfloat16,
+                "float32": torch.float32,
+                "fp32": torch.float32,
+            }
+            return dtype_map.get(dtype.lower(), torch.float32)
+        return dtype
+
+    device_str = str(device)
+    if "cuda" in device_str and torch.cuda.is_available():
+        if torch.cuda.is_bf16_supported():
+            return torch.bfloat16
+        return torch.float16
+    return torch.float32
+
+
 class SAM3TextEmbedder:
     """
     Backend service/model to convert text prompts into SAM3 text embeddings
@@ -31,11 +63,13 @@ class SAM3TextEmbedder:
         self,
         device: str | torch.device | None = None,
         model_path: str = MODEL_PATH,
+        dtype: torch.dtype | str | None = None,
         token: str | None = None,
         model: Sam3Model | None = None,
         processor: Sam3Processor | None = None,
     ):
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.dtype = _resolve_torch_dtype(self.device, dtype)
         self.model_path = model_path
         self.token = token or hf_token
         self.model = model
@@ -47,6 +81,7 @@ class SAM3TextEmbedder:
         """
         model = Sam3Model.from_pretrained(
             self.model_path,
+            torch_dtype=self.dtype,
             token=self.token,
         ).to(self.device)  # type: ignore
         model.eval()
@@ -56,6 +91,24 @@ class SAM3TextEmbedder:
             token=self.token,
         )
         return model, processor
+
+    def unload(self) -> None:
+        """
+        Unloads the SAM3 model from memory and clears GPU VRAM cache.
+        """
+        self.model = None
+        self.processor = None
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    def __enter__(self) -> "SAM3TextEmbedder":
+        if self.model is None or self.processor is None:
+            self.model, self.processor = self.load_model()
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.unload()
 
     def encode(self, prompts: list[str] | str) -> dict[str, dict[str, torch.Tensor]]:
         """
@@ -100,6 +153,11 @@ class SAM3TextEmbedder:
                     "input_ids": text_input.input_ids.detach().cpu(),
                     "attention_mask": text_input.attention_mask.detach().cpu(),
                 }
+                del text_embed
+                del text_input
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         return embeddings
 
@@ -174,10 +232,12 @@ class SAM3Segmentation:
         self,
         device: str | torch.device | None = None,
         model_path: str = MODEL_PATH,
+        dtype: torch.dtype | str | None = None,
         prompts: list[str] | None = None,
         token: str | None = None,
     ):
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.dtype = _resolve_torch_dtype(self.device, dtype)
         self.model_path = model_path
         self.token = token or hf_token
 
@@ -195,6 +255,7 @@ class SAM3Segmentation:
         """
         model = Sam3Model.from_pretrained(
             self.model_path,
+            torch_dtype=self.dtype,
             token=self.token,
         ).to(self.device)  # type: ignore
         model.eval()
@@ -205,10 +266,33 @@ class SAM3Segmentation:
         )
         return model, processor
 
+    def unload(self) -> None:
+        """
+        Unloads the SAM3 model from VRAM, cleans up cached tensors, and releases GPU memory.
+        """
+        self.model = None
+        self.processor = None
+        self.text_embeddings = None
+        self.text_inputs = None
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    def __enter__(self) -> "SAM3Segmentation":
+        if self.model is None or self.processor is None:
+            self.model, self.processor = self.load_model()
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.unload()
+
     def get_text_embeddings(self, PROMPT: list[str]) -> list[Any]:
         """
         Extracts and caches text feature embeddings for the given list of prompts.
         """
+        if self.model is None or self.processor is None:
+            self.model, self.processor = self.load_model()
+
         self.prompts = list(PROMPT)
         self.text_embeddings = []
         self.text_inputs = []
@@ -258,6 +342,9 @@ class SAM3Segmentation:
             Mapping from each prompt string to a list of 2D boolean masks of shape (H, W)
             corresponding to each rendered view.
         """
+        if self.model is None or self.processor is None:
+            self.model, self.processor = self.load_model()
+
         if not isinstance(mesh, BaseModelClass):
             mesh = BaseModelClass(mesh)
 
@@ -286,7 +373,7 @@ class SAM3Segmentation:
                 ).to(self.device)
 
                 vision_embeds = self.model.get_vision_features(
-                    pixel_values=image_inputs.pixel_values,
+                    pixel_values=image_inputs.pixel_values.to(dtype=self.dtype),
                 )
                 target_sizes = [[image.height, image.width]]
 
@@ -322,5 +409,19 @@ class SAM3Segmentation:
                         )
 
                     results_masks[prompt].append(combined_mask)
+
+                    del outputs
+                    del results
+                    del masks
+
+                del vision_embeds
+                del image_inputs
+
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         return dict(results_masks)

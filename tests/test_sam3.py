@@ -205,3 +205,210 @@ def test_sam3_visual_killer_whale_tail_segmentation():
     assert summary_artifact_path.exists()
     assert summary_artifact_path.stat().st_size > 0
     print(f"\n[Visual Test Artifact Saved]: {summary_artifact_path.resolve()}")
+
+
+@pytest.mark.slow
+@pytest.mark.sam3
+@pytest.mark.skipif(
+    not torch.cuda.is_available() and not os.getenv("HF_TOKEN"),
+    reason="CUDA device or HF_TOKEN required for full SAM3 multi-mesh stress test",
+)
+def test_sam3_multi_mesh_memory_stress_test_20_meshes():
+    """
+    Stress test: Runs SAM3 segmentation sequentially across up to 20 different 3D meshes
+    without saving outputs, validating that memory doesn't leak or cause progressive lag.
+    """
+    import gc
+    import time
+
+    models_dir = Path("generated_data/models")
+    mesh_paths = sorted(list(models_dir.glob("*.glb")))
+    if len(mesh_paths) < 20:
+        # Include nested backups if needed to reach 20
+        mesh_paths += sorted(list(models_dir.glob("*/*.glb")))
+    mesh_paths = mesh_paths[:20]
+
+    assert len(mesh_paths) > 0, "No .glb test meshes found in generated_data/models"
+    print(
+        f"\n[SAM3 Stress Test] Running sequential inference on {len(mesh_paths)} meshes..."
+    )
+
+    prompt = "tail"
+    times = []
+    vram_used = []
+
+    with SAM3Segmentation(prompts=[prompt]) as segmenter:
+        for idx, mesh_path in enumerate(mesh_paths):
+            t_start = time.perf_counter()
+
+            # 1. Load model with compact viewport
+            model = BaseModelClass(mesh_path, renderer_size=(512, 512))
+            assert model.mesh is not None
+
+            # 2. Run multi-view SAM3 segmentation
+            masks_dict = segmenter(model, threshold=0.5, mask_threshold=0.5)
+            assert prompt in masks_dict
+
+            # 3. Fast backprojection
+            faces_per_view = model.views_output["faces"]
+            face_votes = backproject_masks_to_faces(
+                masks_dict, faces_per_view, len(model.mesh.faces)
+            )
+            assert prompt in face_votes
+
+            t_elapsed = time.perf_counter() - t_start
+            times.append(t_elapsed)
+
+            # Measure VRAM if on CUDA
+            if torch.cuda.is_available():
+                allocated_mb = torch.cuda.memory_allocated() / (1024**2)
+                reserved_mb = torch.cuda.memory_reserved() / (1024**2)
+                vram_used.append(allocated_mb)
+                vram_str = f"| VRAM Allocated: {allocated_mb:.1f} MB, Reserved: {reserved_mb:.1f} MB"
+            else:
+                vram_str = ""
+
+            print(
+                f"  [{idx + 1:02d}/{len(mesh_paths):02d}] {mesh_path.name:30s} "
+                f"Time: {t_elapsed:.2f}s {vram_str}"
+            )
+
+            # Explicit cleanup of model
+            del model
+            del masks_dict
+            del face_votes
+            gc.collect()
+
+    avg_time = sum(times) / len(times)
+    print(
+        f"\n[SAM3 Stress Test Completed] Processed {len(mesh_paths)} meshes. Average Time: {avg_time:.2f}s per mesh."
+    )
+    if vram_used:
+        print(
+            f"  Max VRAM Allocated: {max(vram_used):.1f} MB, Final VRAM Allocated: {vram_used[-1]:.1f} MB"
+        )
+
+
+@pytest.mark.slow
+@pytest.mark.sam3
+@pytest.mark.skipif(
+    not torch.cuda.is_available() and not os.getenv("HF_TOKEN"),
+    reason="CUDA device or HF_TOKEN required for SAM3 determinism test",
+)
+def test_sam3_single_mesh_determinism_test_10_runs():
+    """
+    Determinism test: Runs SAM3 segmentation on the exact same mesh 10 consecutive times.
+    Measures IoU, pixel differences, and face-vote consistency across all runs to assess output stability.
+    """
+    import gc
+    import time
+
+    mesh_path = KILLER_WHALE_MESH_PATH
+    if not mesh_path.exists():
+        fallback_models = list(Path("generated_data/models").glob("*.glb"))
+        assert fallback_models, "No test meshes found in generated_data/models"
+        mesh_path = fallback_models[0]
+
+    num_iterations = 10
+    prompts = ["tail"]
+    print(
+        f"\n[SAM3 Determinism Test] Running {num_iterations} repeated segmentations on '{mesh_path.name}'..."
+    )
+
+    # Load model once to keep camera views, vertex order, and rendered buffers identical
+    model = BaseModelClass(mesh_path, renderer_size=(512, 512))
+    assert model.mesh is not None
+    num_faces = len(model.mesh.faces)
+    faces_per_view = model.views_output["faces"]
+    num_views = len(model.views_output["matte"])
+
+    baseline_masks: dict[str, list[np.ndarray]] | None = None
+    baseline_votes: dict[str, np.ndarray] | None = None
+
+    ious_all_runs: list[float] = []
+    diff_pixels_all_runs: list[int] = []
+    exact_matches_all_runs: list[bool] = []
+    times: list[float] = []
+
+    with SAM3Segmentation(prompts=prompts) as segmenter:
+        for run_idx in range(num_iterations):
+            t_start = time.perf_counter()
+
+            # Run SAM3 segmentation
+            masks_dict = segmenter(model, threshold=0.5, mask_threshold=0.5)
+
+            # Backproject masks to 3D faces
+            face_votes = backproject_masks_to_faces(
+                masks_dict, faces_per_view, num_faces
+            )
+            t_elapsed = time.perf_counter() - t_start
+            times.append(t_elapsed)
+
+            if run_idx == 0:
+                baseline_masks = {
+                    p: [m.copy() for m in masks] for p, masks in masks_dict.items()
+                }
+                baseline_votes = {p: v.copy() for p, v in face_votes.items()}
+                print(
+                    f"  [Run 01/{num_iterations:02d}] Baseline established in {t_elapsed:.2f}s."
+                )
+                continue
+
+            # Compare against baseline
+            run_ious = []
+            run_diff_pixels = 0
+            run_exact = True
+
+            for prompt in prompts:
+                for v_idx in range(num_views):
+                    curr_m = masks_dict[prompt][v_idx]
+                    base_m = baseline_masks[prompt][v_idx]
+
+                    # 1. Exact equality
+                    if not np.array_equal(curr_m, base_m):
+                        run_exact = False
+
+                    # 2. Pixel difference count
+                    diff_count = int(np.bitwise_xor(curr_m, base_m).sum())
+                    run_diff_pixels += diff_count
+
+                    # 3. Intersection over Union (IoU)
+                    intersection = int(np.logical_and(curr_m, base_m).sum())
+                    union = int(np.logical_or(curr_m, base_m).sum())
+                    iou = 1.0 if union == 0 else (intersection / union)
+                    run_ious.append(iou)
+
+            mean_run_iou = float(np.mean(run_ious))
+            ious_all_runs.append(mean_run_iou)
+            diff_pixels_all_runs.append(run_diff_pixels)
+            exact_matches_all_runs.append(run_exact)
+
+            # Compare 3D face votes
+            face_votes_exact = all(
+                np.array_equal(face_votes[p], baseline_votes[p]) for p in prompts
+            )
+
+            print(
+                f"  [Run {run_idx + 1:02d}/{num_iterations:02d}] Time: {t_elapsed:.2f}s | "
+                f"Mean IoU: {mean_run_iou:.6f} | Differing Pixels: {run_diff_pixels:5d} | "
+                f"2D Exact: {str(run_exact):5s} | 3D Face Votes Exact: {str(face_votes_exact)}"
+            )
+
+            del masks_dict
+            del face_votes
+            gc.collect()
+
+    avg_iou = float(np.mean(ious_all_runs))
+    max_diff = max(diff_pixels_all_runs)
+    exact_ratio = sum(exact_matches_all_runs) / len(exact_matches_all_runs) * 100.0
+
+    print(f"\n[Determinism Summary across {num_iterations} runs]:")
+    print(f"  Average Time per Run: {sum(times) / len(times):.2f}s")
+    print(f"  Mean IoU vs Baseline: {avg_iou:.6f}")
+    print(f"  Max Differing Pixels across all views: {max_diff}")
+    print(f"  Exact Match Rate: {exact_ratio:.1f}%")
+
+    # High consistency requirement: Mean IoU should be virtually 1.0 (>0.999)
+    assert avg_iou > 0.999, (
+        f"Segmentation determinism failed: Mean IoU ({avg_iou:.4f}) is below 0.999"
+    )
