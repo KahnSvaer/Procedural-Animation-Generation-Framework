@@ -319,7 +319,8 @@ class SAM3Segmentation:
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         max_masks_per_view: int = 2,
-    ) -> dict[str, list[np.ndarray]]:
+        return_instances: bool = False,
+    ) -> dict[str, list[Any]]:
         """
         Runs multi-view segmentation on the 3D mesh views using SAM3.
 
@@ -335,12 +336,15 @@ class SAM3Segmentation:
             Binarization threshold for output masks.
         max_masks_per_view : int, default=2
             Maximum number of top instance masks to combine per view.
+        return_instances : bool, default=False
+            If True, returns a list of individual instance masks per view (list[list[np.ndarray]]).
+            If False, combines instance masks per view with logical OR (list[np.ndarray]).
 
         Returns
         -------
-        dict[str, list[np.ndarray]]
-            Mapping from each prompt string to a list of 2D boolean masks of shape (H, W)
-            corresponding to each rendered view.
+        dict[str, list[np.ndarray]] | dict[str, list[list[np.ndarray]]]
+            Mapping from each prompt string to either a list of 2D boolean masks or a list
+            of per-instance mask lists corresponding to each rendered view.
         """
         if self.model is None or self.processor is None:
             self.model, self.processor = self.load_model()
@@ -363,7 +367,7 @@ class SAM3Segmentation:
         view_outputs = mesh.views_output
         images = view_outputs["matte"]
 
-        results_masks: dict[str, list[np.ndarray]] = defaultdict(list)
+        results_masks: dict[str, list[Any]] = defaultdict(list)
 
         with torch.no_grad():
             for image_idx, image in enumerate(images):
@@ -393,22 +397,36 @@ class SAM3Segmentation:
                     )[0]
 
                     masks = results.get("masks", [])
-                    if len(masks) > 0:
-                        combined_mask = (
-                            masks[:max_masks_per_view].any(dim=0).cpu().numpy()
-                        )
-                        if combined_mask.shape != (image.height, image.width):
-                            combined_mask = cv2.resize(
-                                combined_mask.astype(np.uint8),
-                                (image.width, image.height),
-                                interpolation=cv2.INTER_NEAREST,
-                            ).astype(bool)
+                    if return_instances:
+                        view_instance_masks = []
+                        if len(masks) > 0:
+                            for m in masks[:max_masks_per_view]:
+                                m_np = m.cpu().numpy()
+                                if m_np.shape != (image.height, image.width):
+                                    m_np = cv2.resize(
+                                        m_np.astype(np.uint8),
+                                        (image.width, image.height),
+                                        interpolation=cv2.INTER_NEAREST,
+                                    ).astype(bool)
+                                view_instance_masks.append(m_np)
+                        results_masks[prompt].append(view_instance_masks)
                     else:
-                        combined_mask = np.zeros(
-                            (image.height, image.width), dtype=bool
-                        )
+                        if len(masks) > 0:
+                            combined_mask = (
+                                masks[:max_masks_per_view].any(dim=0).cpu().numpy()
+                            )
+                            if combined_mask.shape != (image.height, image.width):
+                                combined_mask = cv2.resize(
+                                    combined_mask.astype(np.uint8),
+                                    (image.width, image.height),
+                                    interpolation=cv2.INTER_NEAREST,
+                                ).astype(bool)
+                        else:
+                            combined_mask = np.zeros(
+                                (image.height, image.width), dtype=bool
+                            )
 
-                    results_masks[prompt].append(combined_mask)
+                        results_masks[prompt].append(combined_mask)
 
                     del outputs
                     del results
