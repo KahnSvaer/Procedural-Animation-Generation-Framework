@@ -183,11 +183,18 @@ class SerpentineModels(Pipeline):
         if not longest_path:
             longest_path = list(range(len(skel_v_final)))
 
-        # Determine Head vs Tail at the two chain endpoints
         tip_a, tip_b = longest_path[0], longest_path[-1]
 
-        # The aligned mesh guarantees head is at negative X and tail is at positive X
-        head_is_a = bool(skel_v_final[tip_a, 0] < skel_v_final[tip_b, 0])
+        # Measure local cross-sectional spread at tip_a vs tip_b on the original mesh
+        d_a = np.linalg.norm(self.model.mesh.vertices - skel_v_final[tip_a], axis=1)
+        d_b = np.linalg.norm(self.model.mesh.vertices - skel_v_final[tip_b], axis=1)
+        near_a = self.model.mesh.vertices[d_a < 0.25]
+        near_b = self.model.mesh.vertices[d_b < 0.25]
+        spread_a = float(np.std(near_a, axis=0).sum()) if len(near_a) > 0 else 0.0
+        spread_b = float(np.std(near_b, axis=0).sum()) if len(near_b) > 0 else 0.0
+
+        # Head has larger cross-sectional spread -> start chain from Head
+        head_is_a = spread_a > spread_b
         if self.reverse:
             head_is_a = not head_is_a
 
