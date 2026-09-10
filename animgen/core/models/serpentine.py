@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Any, Optional
 import copy
+import networkx as nx
 import numpy as np
 import torch
 import trimesh
@@ -57,6 +58,7 @@ class SerpentineModels(Pipeline):
         prompts_embedding_path: Path | None = None,
         num_bones: int = DEFAULT_SERPENTINE_PARAMS["num_bones"],
         frame_rate: float = DEFAULT_SERPENTINE_PARAMS["frame_rate"],
+        reverse: bool = False,
         animations: dict[str, dict[str, Any]] | None = None,
     ):
         """
@@ -74,6 +76,8 @@ class SerpentineModels(Pipeline):
             Number of bones to construct along the straightened spine.
         frame_rate : float, default=30.0
             Frame rate (FPS) for keyframe animation sampling.
+        reverse : bool, default=False
+            If True, reverses the head-to-tail alignment and spine direction.
         animations : dict[str, dict[str, Any]] | None, optional
             Dictionary mapping animation clip names to wave parameters.
         """
@@ -88,6 +92,7 @@ class SerpentineModels(Pipeline):
 
         self.num_bones: int = num_bones
         self.frame_rate: float = frame_rate
+        self.reverse: bool = reverse
 
         self.animations: dict[str, dict[str, Any]] = copy.deepcopy(
             DEFAULT_SERPENTINE_PARAMS["animations"]
@@ -149,26 +154,47 @@ class SerpentineModels(Pipeline):
             num_iters=10,
         )
 
-        # 3. Trace 1D continuous node chain from endpoint to endpoint
-        adj: dict[int, list[int]] = {i: [] for i in range(len(skel_v_final))}
+        # 3. Trace longest 1D continuous node chain from Head to Tail
+        G = nx.Graph()
         for u, v in skel_e_ref:
-            adj[u].append(v)
-            adj[v].append(u)
+            dist = float(np.linalg.norm(skel_v_final[u] - skel_v_final[v]))
+            G.add_edge(u, v, weight=dist)
 
-        endpoints = [i for i, nbs in adj.items() if len(nbs) == 1]
-        start_node = endpoints[0] if len(endpoints) > 0 else 0
+        endpoints = [n for n in G.nodes() if G.degree(n) == 1]
+        longest_path: list[int] = []
+        max_path_len = -1.0
 
-        chain = [start_node]
-        visited = {start_node}
-        curr = start_node
-        while True:
-            next_nodes = [nb for nb in adj[curr] if nb not in visited]
-            if not next_nodes:
-                break
-            next_node = next_nodes[0]
-            visited.add(next_node)
-            chain.append(next_node)
-            curr = next_node
+        if len(endpoints) >= 2:
+            for i in range(len(endpoints)):
+                for j in range(i + 1, len(endpoints)):
+                    u_node, v_node = endpoints[i], endpoints[j]
+                    try:
+                        p_len = nx.shortest_path_length(
+                            G, source=u_node, target=v_node, weight="weight"
+                        )
+                        if p_len > max_path_len:
+                            max_path_len = p_len
+                            longest_path = nx.shortest_path(
+                                G, source=u_node, target=v_node, weight="weight"
+                            )
+                    except nx.NetworkXNoPath:
+                        continue
+
+        if not longest_path:
+            longest_path = list(range(len(skel_v_final)))
+
+        # Determine Head vs Tail at the two chain endpoints
+        tip_a, tip_b = longest_path[0], longest_path[-1]
+
+        # The aligned mesh guarantees head is at negative X and tail is at positive X
+        head_is_a = bool(skel_v_final[tip_a, 0] < skel_v_final[tip_b, 0])
+        if self.reverse:
+            head_is_a = not head_is_a
+
+        if head_is_a:
+            chain = longest_path
+        else:
+            chain = longest_path[::-1]
 
         ordered_verts = skel_v_final[chain]
         pts_t = [torch.tensor(v, dtype=torch.float32) for v in ordered_verts]
