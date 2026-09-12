@@ -64,15 +64,18 @@ class BaseModelClass:
     def faces(self) -> np.ndarray:
         return self.mesh.faces
 
-    def preprocess_mesh(self, mesh: trimesh.Trimesh):
+    def preprocess_mesh(self, mesh: trimesh.Trimesh) -> trimesh.Trimesh:
         """
-        Preprocesses the mesh.
+        Preprocesses the mesh:
+        Centers and normalizes coordinates within a unit bounding sphere,
+        preserving original vertex count, UV maps, and visual attributes.
         """
         mesh = mesh.copy()
         center = mesh.vertices.mean(axis=0)
         mesh.vertices -= center
-        scale = np.max(np.linalg.norm(mesh.vertices, axis=1))
-        mesh.vertices /= scale
+        scale = float(np.max(np.linalg.norm(mesh.vertices, axis=1)))
+        if scale > 1e-8:
+            mesh.vertices /= scale
         return mesh
 
     def _set_renderer(self) -> Renderer:

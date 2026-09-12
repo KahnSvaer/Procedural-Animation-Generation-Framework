@@ -222,7 +222,7 @@ def add_armature_and_skin(
     root_indices = [
         bone_to_node_idx[r.id]
         for r in armature.disconnected_chain_roots
-        if r.id in bone_to_node_idx
+        if r.parent is None and r.id in bone_to_node_idx
     ]
     armature_node = pygltflib.Node(name="Armature", children=root_indices)
     gltf.nodes.append(armature_node)

@@ -42,6 +42,8 @@ def compute_forward_kinematics(
     global_positions: dict[str, tuple[np.ndarray, np.ndarray]] = {}
 
     def _eval_bone(bone: Bone) -> None:
+        if bone.id in global_rotations:
+            return
         idx = bone_to_idx[bone.id]
         R_local_raw = frame[idx] if idx < len(frame) else np.eye(3)
         if isinstance(R_local_raw, torch.Tensor):

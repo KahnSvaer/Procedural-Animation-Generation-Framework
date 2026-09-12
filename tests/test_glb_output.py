@@ -214,3 +214,35 @@ def test_export_glb_with_multiple_animations(tmp_path: Path):
     assert len(gltf2.animations) == 2
     assert gltf2.animations[0].name == "Clip1"
     assert gltf2.animations[1].name == "Clip2"
+
+
+def test_export_glb_with_unconnected_bones(tmp_path: Path):
+    """
+    Test that unconnected bones parented to an existing bone remain properly
+    parented to that bone in glTF (not reparented to the static Armature root node).
+    """
+    box = trimesh.creation.box()
+    root = Bone(id="root_bone", head=(0.0, 0.0, 0.0), tail=(0.0, 0.0, 0.5))
+    armature = Armature(root)
+    b1 = armature.add_connected_bone(root, tail=(0.0, 0.0, 1.0))
+    b1.id = "spine_1"
+    b_fin = armature.add_unconnected_bone(
+        b1, head=(0.5, 0.5, 0.5), tail=(0.5, 1.0, 0.5)
+    )
+    b_fin.id = "dorsal_fin_0"
+
+    assert b_fin in armature.disconnected_chain_roots
+
+    out_file = tmp_path / "unconnected_armature.glb"
+    export_glb(box, out_file, armature=armature)
+    gltf = pygltflib.GLTF2().load(str(out_file))
+
+    root_node_idx = next(i for i, n in enumerate(gltf.nodes) if n.name == "root_bone")
+    spine_node_idx = next(i for i, n in enumerate(gltf.nodes) if n.name == "spine_1")
+    fin_node_idx = next(i for i, n in enumerate(gltf.nodes) if n.name == "dorsal_fin_0")
+    armature_node = next(n for n in gltf.nodes if n.name == "Armature")
+
+    assert armature_node.children == [root_node_idx]
+    assert spine_node_idx in gltf.nodes[root_node_idx].children
+    assert fin_node_idx in gltf.nodes[spine_node_idx].children
+    assert fin_node_idx not in armature_node.children
