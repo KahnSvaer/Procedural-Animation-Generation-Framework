@@ -89,7 +89,7 @@ DEFAULT_CAMERA_PARAMS = {"fov": 60, "znear": 0.01, "zfar": 16}
 class Renderer:
     """ """
 
-    def __init__(self, viewport_width=1024, viewport_height=1024):
+    def __init__(self, viewport_width=512, viewport_height=512):
         """ """
         self.renderer = pyrender.OffscreenRenderer(
             viewport_height=viewport_height, viewport_width=viewport_width

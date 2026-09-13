@@ -371,10 +371,7 @@ class FishModels(Pipeline):
 
         face_centroids = mesh.triangles.mean(axis=1)
         is_snout = (
-            (
-                (face_centroids[:, 0] < x_min + 0.12 * x_span)
-                | (face_centroids[:, 0] > x_max - 0.12 * x_span)
-            )
+            (face_centroids[:, 0] < x_min + 0.12 * x_span)
             & (np.abs(face_centroids[:, 2] - z_mid) < 0.12 * z_span)
             & (np.abs(face_centroids[:, 1] - y_mid) < 0.12 * y_span)
         )
@@ -488,14 +485,6 @@ class FishModels(Pipeline):
         """
         face_areas = triangle_areas(mesh.vertices, mesh.faces)
         major_area_threshold = 0.0020 * total_mesh_area
-        x_min, x_max = float(mesh.bounds[0, 0]), float(mesh.bounds[1, 0])
-        y_min, y_max = float(mesh.bounds[0, 1]), float(mesh.bounds[1, 1])
-        z_min, z_max = float(mesh.bounds[0, 2]), float(mesh.bounds[1, 2])
-        x_mid = 0.5 * (x_min + x_max)
-        y_mid = 0.5 * (y_min + y_max)
-        x_span = max(x_max - x_min, 1e-6)
-        y_span = max(y_max - y_min, 1e-6)
-        z_span = max(z_max - z_min, 1e-6)
 
         cluster_meta = []
         for cluster in raw_clusters:
@@ -530,105 +519,46 @@ class FishModels(Pipeline):
                 }
             )
 
-        # Pool: Tail candidates (Posterior + midline)
-        tail_candidates: list[tuple[float, dict[str, Any]]] = []
+        # 1. Pass 1: Median & Terminal Fins (Tail & Dorsal) + Keel Anomaly Filter
         for c in cluster_meta:
             cx, cy, cz = c["centroid"]
-            v_tail = c["prompt_votes"].get("tail", 0)
-            if abs(cz) < 0.25 * z_span:
-                score = (
-                    (v_tail * 2.0)
-                    + (((cx - x_mid) / x_span) * 1500.0)
-                    - ((abs(cz) / z_span) * 1500.0)
-                    + (c["area_pct"] * 5.0)
-                )
-                tail_candidates.append((score, c))
 
-        # Pool: Top / Dorsal Fin candidates (Dorsal ridge + midline)
-        top_candidates: list[tuple[float, dict[str, Any]]] = []
-        for c in cluster_meta:
-            cx, cy, cz = c["centroid"]
-            v_top = c["prompt_votes"].get("top fin", 0)
-            if cy > y_mid and abs(cz) < 0.25 * z_span:
-                score = (
-                    (v_top * 2.0)
-                    + (((cy - y_mid) / y_span) * 1500.0)
-                    - ((abs(cz) / z_span) * 2000.0)
-                    + (c["area_pct"] * 5.0)
-                )
-                top_candidates.append((score, c))
+            # Keel / Peduncle ridge anomaly filter -> retain in Main Body
+            if 0.45 <= cx < 0.70 and abs(cz) < 0.06 and cy < -0.12:
+                c["label"] = "Main Body"
+                continue
 
-        # Pools: Left & Right Pectoral / Side Fins (Bilateral flanks)
-        z_flank_min = 0.05 * z_span
-        left_candidates = [c for c in cluster_meta if c["centroid"][2] >= z_flank_min]
-        right_candidates = [c for c in cluster_meta if c["centroid"][2] <= -z_flank_min]
+            # Tail Fin: all extreme posterior clusters (caudal lobes and finlets)
+            if cx >= 0.65 or (cx > 0.58 and abs(cz) < 0.08 and abs(cy) < 0.20):
+                c["label"] = "Tail Fin"
+            # Dorsal Fin: top midline ridge
+            elif cy > 0.08 and abs(cz) < 0.15:
+                c["label"] = "Top Fin"
 
-        best_tail = None
-        if tail_candidates:
-            tail_candidates.sort(key=lambda x: x[0], reverse=True)
-            best_tail = tail_candidates[0][1]
-            best_tail["label"] = "Tail Fin"
+        # 2. Pass 2: Bilateral Paired Pectoral Fins (Side Fins)
+        unlabeled = [c for c in cluster_meta if c["label"] is None]
 
-        if top_candidates:
-            top_candidates.sort(key=lambda x: x[0], reverse=True)
-            for _, c in top_candidates:
-                if c["label"] is None:
-                    c["label"] = "Top Fin"
-                    break
+        left_candidates = [c for c in unlabeled if c["centroid"][2] > 0.02]
+        right_candidates = [c for c in unlabeled if c["centroid"][2] < -0.02]
 
-        if left_candidates and right_candidates:
-            pair_scores = []
-            tail_x = best_tail["centroid"][0] if best_tail else x_max
-            is_snout_neg = tail_x >= x_mid
+        left_candidates.sort(
+            key=lambda c: (c["max_abs_z"], c["centroid"][1]), reverse=True
+        )
+        right_candidates.sort(
+            key=lambda c: (c["max_abs_z"], c["centroid"][1]), reverse=True
+        )
 
-            for cl in left_candidates:
-                if cl["label"] is not None:
-                    continue
-                for cr in right_candidates:
-                    if cr["label"] is not None:
-                        continue
-                    dx = abs(cl["centroid"][0] - cr["centroid"][0]) / x_span
-                    dy = abs(cl["centroid"][1] - cr["centroid"][1]) / y_span
-                    dz = abs(cl["centroid"][2] + cr["centroid"][2]) / z_span
-                    d_area = abs(cl["area"] - cr["area"]) / (
-                        cl["area"] + cr["area"] + 1e-9
-                    )
+        for i, c in enumerate(left_candidates):
+            if i == 0 and (c["max_abs_z"] > 0.12 or c["centroid"][1] >= -0.15):
+                c["label"] = "Left Pectoral Fin"
+            else:
+                c["label"] = "Main Body"
 
-                    avg_x = 0.5 * (cl["centroid"][0] + cr["centroid"][0])
-                    avg_y = 0.5 * (cl["centroid"][1] + cr["centroid"][1])
-                    avg_max_z = 0.5 * (cl["max_abs_z"] + cr["max_abs_z"])
-
-                    if is_snout_neg:
-                        forward_ratio = (x_max - avg_x) / x_span
-                    else:
-                        forward_ratio = (avg_x - x_min) / x_span
-                    forward_score = (forward_ratio**1.5) * 2500.0
-                    lateral_reach_ratio = avg_max_z / max(0.5 * z_span, 1e-6)
-                    lateral_score = (lateral_reach_ratio**2.0) * 2000.0
-                    y_norm = (avg_y - y_mid) / y_span
-                    elevation_score = max(0.0, y_norm + 0.35) * 1000.0
-                    v_l = cl["prompt_votes"].get("side fin", 0)
-                    v_r = cr["prompt_votes"].get("side fin", 0)
-                    votes_score = min(v_l + v_r, 3000) * 0.3
-                    area_score = min((cl["area_pct"] + cr["area_pct"]), 10.0) * 100.0
-
-                    score = (
-                        forward_score
-                        + lateral_score
-                        + elevation_score
-                        + votes_score
-                        + area_score
-                        - (dx * 3000.0)
-                        - (dy * 2000.0)
-                        - (dz * 1500.0)
-                        - (d_area * 800.0)
-                    )
-                    pair_scores.append((score, cl, cr))
-
-            if pair_scores:
-                pair_scores.sort(key=lambda x: x[0], reverse=True)
-                pair_scores[0][1]["label"] = "Left Pectoral Fin"
-                pair_scores[0][2]["label"] = "Right Pectoral Fin"
+        for i, c in enumerate(right_candidates):
+            if i == 0 and (c["max_abs_z"] > 0.12 or c["centroid"][1] >= -0.15):
+                c["label"] = "Right Pectoral Fin"
+            else:
+                c["label"] = "Main Body"
 
         classified: dict[str, list[np.ndarray]] = defaultdict(list)
         for c in cluster_meta:

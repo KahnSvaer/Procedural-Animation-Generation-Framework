@@ -4,7 +4,6 @@ This module contains functions to output GLB (glTF 2.0 Binary) file format.
 It constructs valid glTF 2.0 binary packages with mesh primitives, materials,
 skeletal node hierarchies, skinning weights, and animations using pygltflib and trimesh.
 
-NOTE: This should probably be very useful if it is created into a separated library later on.
 """
 
 from pathlib import Path
@@ -124,12 +123,166 @@ def add_armature_and_skin(
     if weights_dict is None:
         weights_dict = compute_auto_skin_weights(mesh, armature)
 
-    bone_ids = [b.id for b in armature.bones_list]
     num_verts = len(mesh.vertices)
 
+    # Build Bone Node Hierarchy & Joint List
+    # For disconnected bones whose head doesn't coincide with their parent's tail,
+    # a rigid connector glTF joint is injected (parent.tail → bone.head) so the
+    # exported skeleton has no visual gaps and acts as a structural joint with 0 skin weight.
+    bone_to_node_idx: dict[str, int] = {}
+    bone_id_to_joint_idx: dict[str, int] = {}
+    joint_indices: list[int] = []
+    inv_bind_matrices: list[np.ndarray] = []
+    # Maps bone id → the glTF node index that should act as its parent in the hierarchy
+    # (either the real parent node, or an injected connector node).
+    bone_effective_parent_node: dict[str, int] = {}
+
+    for bone in armature.bones_list:
+        if bone.parent is None:
+            trans = [float(bone.head[0]), float(bone.head[1]), float(bone.head[2])]
+        elif not bone.is_connected_to_parent:
+            # Check whether there is a gap between parent tail and this bone's head.
+            gap = [
+                float(bone.head[0] - bone.parent.tail[0]),
+                float(bone.head[1] - bone.parent.tail[1]),
+                float(bone.head[2] - bone.parent.tail[2]),
+            ]
+            gap_dist = (gap[0] ** 2 + gap[1] ** 2 + gap[2] ** 2) ** 0.5
+            if gap_dist > 1e-6:
+                # Inject a connector joint: translation relative to parent head
+                p_head = bone.parent.head
+                connector_trans = [
+                    float(bone.parent.tail[0] - p_head[0]),
+                    float(bone.parent.tail[1] - p_head[1]),
+                    float(bone.parent.tail[2] - p_head[2]),
+                ]
+                connector_node = pygltflib.Node(
+                    name=f"{bone.id}_connector",
+                    translation=connector_trans
+                    if connector_trans != [0.0, 0.0, 0.0]
+                    else None,
+                    children=[],
+                )
+                gltf.nodes.append(connector_node)
+                connector_idx = len(gltf.nodes) - 1
+                joint_indices.append(connector_idx)
+
+                # IBM for connector joint at parent.tail world position
+                M_conn = np.eye(4, dtype=np.float32)
+                M_conn[0, 3] = -float(bone.parent.tail[0])
+                M_conn[1, 3] = -float(bone.parent.tail[1])
+                M_conn[2, 3] = -float(bone.parent.tail[2])
+                inv_bind_matrices.append(M_conn.T)
+
+                # Remember: this bone's parent in the hierarchy is the connector node
+                bone_effective_parent_node[bone.id] = connector_idx
+                # The connector node itself is a child of the real parent node
+                p_node_idx = bone_to_node_idx[bone.parent.id]
+                if gltf.nodes[p_node_idx].children is None:
+                    gltf.nodes[p_node_idx].children = []
+                gltf.nodes[p_node_idx].children.append(connector_idx)
+                # This bone's translation is now relative to the connector (= the gap itself)
+                trans = gap
+            else:
+                # No meaningful gap — translate relative to parent head as usual
+                trans = [
+                    float(bone.head[0] - bone.parent.head[0]),
+                    float(bone.head[1] - bone.parent.head[1]),
+                    float(bone.head[2] - bone.parent.head[2]),
+                ]
+        else:
+            trans = [
+                float(bone.head[0] - bone.parent.head[0]),
+                float(bone.head[1] - bone.parent.head[1]),
+                float(bone.head[2] - bone.parent.head[2]),
+            ]
+
+        node = pygltflib.Node(
+            name=bone.id,
+            translation=trans if trans != [0.0, 0.0, 0.0] else None,
+            children=[],
+        )
+        gltf.nodes.append(node)
+        idx = len(gltf.nodes) - 1
+        bone_to_node_idx[bone.id] = idx
+
+        # Add real bone as joint
+        joint_indices.append(idx)
+        bone_id_to_joint_idx[bone.id] = len(joint_indices) - 1
+
+        M_inv = np.eye(4, dtype=np.float32)
+        M_inv[0, 3] = -float(bone.head[0])
+        M_inv[1, 3] = -float(bone.head[1])
+        M_inv[2, 3] = -float(bone.head[2])
+        inv_bind_matrices.append(M_inv.T)
+
+    for bone in armature.bones_list:
+        if bone.parent is not None:
+            c_idx = bone_to_node_idx[bone.id]
+            if bone.id in bone_effective_parent_node:
+                connector_idx = bone_effective_parent_node[bone.id]
+                if gltf.nodes[connector_idx].children is None:
+                    gltf.nodes[connector_idx].children = []
+                if c_idx not in gltf.nodes[connector_idx].children:
+                    gltf.nodes[connector_idx].children.append(c_idx)
+            else:
+                p_idx = bone_to_node_idx[bone.parent.id]
+                if gltf.nodes[p_idx].children is None:
+                    gltf.nodes[p_idx].children = []
+                gltf.nodes[p_idx].children.append(c_idx)
+
+    # For leaf bones of disconnected chains (e.g. side pectoral fins, dorsal fins),
+    # inject a terminal tip glTF joint at bone.tail so 3D viewers (e.g. Blender) reconstruct
+    # the visual bone body from bone.head to bone.tail after the connector.
+    # Connected chains (e.g. spine -> tail) are left without an extra tip joint.
+    parent_bone_ids = {b.parent.id for b in armature.bones_list if b.parent is not None}
+    for bone in armature.bones_list:
+        if bone.id not in parent_bone_ids:
+            # Check if this leaf bone belongs to a disconnected branch
+            curr = bone
+            in_disconnected_chain = False
+            while curr is not None:
+                if curr.parent is not None and not curr.is_connected_to_parent:
+                    in_disconnected_chain = True
+                    break
+                curr = curr.parent
+
+            if not in_disconnected_chain:
+                continue
+
+            tip_rel = [
+                float(bone.tail[0] - bone.head[0]),
+                float(bone.tail[1] - bone.head[1]),
+                float(bone.tail[2] - bone.head[2]),
+            ]
+            tip_dist = (tip_rel[0] ** 2 + tip_rel[1] ** 2 + tip_rel[2] ** 2) ** 0.5
+            if tip_dist > 1e-6:
+                tip_node = pygltflib.Node(
+                    name=f"{bone.id}_tip",
+                    translation=tip_rel if tip_rel != [0.0, 0.0, 0.0] else None,
+                    children=[],
+                )
+                gltf.nodes.append(tip_node)
+                tip_idx = len(gltf.nodes) - 1
+                joint_indices.append(tip_idx)
+
+                # IBM for tip joint at bone.tail world position
+                M_tip = np.eye(4, dtype=np.float32)
+                M_tip[0, 3] = -float(bone.tail[0])
+                M_tip[1, 3] = -float(bone.tail[1])
+                M_tip[2, 3] = -float(bone.tail[2])
+                inv_bind_matrices.append(M_tip.T)
+
+                b_node_idx = bone_to_node_idx[bone.id]
+                if gltf.nodes[b_node_idx].children is None:
+                    gltf.nodes[b_node_idx].children = []
+                gltf.nodes[b_node_idx].children.append(tip_idx)
+
+    # Vertex skinning: map bone weights to the corresponding joint index in skin.joints
     joints_0 = np.zeros((num_verts, 4), dtype=np.uint16)
     weights_0 = np.zeros((num_verts, 4), dtype=np.float32)
 
+    bone_ids = [b.id for b in armature.bones_list]
     all_weights = np.column_stack([weights_dict[b_id] for b_id in bone_ids])
     for i in range(num_verts):
         w_row = all_weights[i]
@@ -140,7 +293,11 @@ def add_armature_and_skin(
             top_weights = top_weights / s
         else:
             top_weights[0] = 1.0
-        joints_0[i, : len(top_indices)] = top_indices
+        # Map original bone index to its joint index in skin.joints
+        mapped_joint_indices = [
+            bone_id_to_joint_idx[bone_ids[b_idx]] for b_idx in top_indices
+        ]
+        joints_0[i, : len(top_indices)] = mapped_joint_indices
         weights_0[i, : len(top_weights)] = top_weights
 
     joints_bv = _append_binary_buffer(
@@ -157,54 +314,15 @@ def add_armature_and_skin(
         gltf, weights_bv, pygltflib.FLOAT, num_verts, pygltflib.VEC4
     )
 
-    inv_bind_matrices = []
-    for bone in armature.bones_list:
-        M_inv = np.eye(4, dtype=np.float32)
-        M_inv[0, 3] = -float(bone.head[0])
-        M_inv[1, 3] = -float(bone.head[1])
-        M_inv[2, 3] = -float(bone.head[2])
-        inv_bind_matrices.append(M_inv.T)  # Column-major for glTF
-
     inv_bind_bytes = np.array(inv_bind_matrices, dtype=np.float32).tobytes()
     inv_bv = _append_binary_buffer(gltf, inv_bind_bytes)
     inv_acc = _append_accessor(
-        gltf, inv_bv, pygltflib.FLOAT, len(armature.bones_list), pygltflib.MAT4
+        gltf, inv_bv, pygltflib.FLOAT, len(joint_indices), pygltflib.MAT4
     )
 
     for prim in gltf.meshes[0].primitives:
         prim.attributes.JOINTS_0 = joints_acc
         prim.attributes.WEIGHTS_0 = weights_acc
-
-    # Build Bone Node Hierarchy
-    bone_to_node_idx: dict[str, int] = {}
-    joint_indices: list[int] = []
-
-    for bone in armature.bones_list:
-        if bone.parent is None:
-            trans = [float(bone.head[0]), float(bone.head[1]), float(bone.head[2])]
-        else:
-            trans = [
-                float(bone.head[0] - bone.parent.head[0]),
-                float(bone.head[1] - bone.parent.head[1]),
-                float(bone.head[2] - bone.parent.head[2]),
-            ]
-        node = pygltflib.Node(
-            name=bone.id,
-            translation=trans if trans != [0.0, 0.0, 0.0] else None,
-            children=[],
-        )
-        gltf.nodes.append(node)
-        idx = len(gltf.nodes) - 1
-        bone_to_node_idx[bone.id] = idx
-        joint_indices.append(idx)
-
-    for bone in armature.bones_list:
-        if bone.parent is not None:
-            p_idx = bone_to_node_idx[bone.parent.id]
-            c_idx = bone_to_node_idx[bone.id]
-            if gltf.nodes[p_idx].children is None:
-                gltf.nodes[p_idx].children = []
-            gltf.nodes[p_idx].children.append(c_idx)
 
     skin_idx = len(gltf.skins)
     gltf.skins.append(

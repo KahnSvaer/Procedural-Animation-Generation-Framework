@@ -326,10 +326,7 @@ def test_skinning_blender_correlation():
     """
     import pytest
 
-    try:
-        pass
-    except Exception as e:
-        pytest.skip(f"bpy import failed: {e}")
+    pytest.importorskip("bpy")
 
     mesh = trimesh.creation.cylinder(radius=0.5, height=3.0, sections=24)
     b0 = Bone(id="b0", head=(0, 0, -1.5), tail=(0, 0, -0.5))

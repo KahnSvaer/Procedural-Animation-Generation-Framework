@@ -239,10 +239,18 @@ def test_export_glb_with_unconnected_bones(tmp_path: Path):
 
     root_node_idx = next(i for i, n in enumerate(gltf.nodes) if n.name == "root_bone")
     spine_node_idx = next(i for i, n in enumerate(gltf.nodes) if n.name == "spine_1")
+    connector_node_idx = next(
+        i for i, n in enumerate(gltf.nodes) if n.name == "dorsal_fin_0_connector"
+    )
     fin_node_idx = next(i for i, n in enumerate(gltf.nodes) if n.name == "dorsal_fin_0")
+    fin_tip_idx = next(
+        i for i, n in enumerate(gltf.nodes) if n.name == "dorsal_fin_0_tip"
+    )
     armature_node = next(n for n in gltf.nodes if n.name == "Armature")
 
     assert armature_node.children == [root_node_idx]
     assert spine_node_idx in gltf.nodes[root_node_idx].children
-    assert fin_node_idx in gltf.nodes[spine_node_idx].children
+    assert connector_node_idx in gltf.nodes[spine_node_idx].children
+    assert fin_node_idx in gltf.nodes[connector_node_idx].children
+    assert fin_tip_idx in gltf.nodes[fin_node_idx].children
     assert fin_node_idx not in armature_node.children

@@ -96,11 +96,17 @@ class SAM3TextEmbedder:
         """
         Unloads the SAM3 model from memory and clears GPU VRAM cache.
         """
+        if self.model is not None:
+            del self.model
+        if self.processor is not None:
+            del self.processor
         self.model = None
         self.processor = None
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+            if hasattr(torch.cuda, "ipc_collect"):
+                torch.cuda.ipc_collect()
 
     def __enter__(self) -> "SAM3TextEmbedder":
         if self.model is None or self.processor is None:
@@ -270,6 +276,10 @@ class SAM3Segmentation:
         """
         Unloads the SAM3 model from VRAM, cleans up cached tensors, and releases GPU memory.
         """
+        if self.model is not None:
+            del self.model
+        if self.processor is not None:
+            del self.processor
         self.model = None
         self.processor = None
         self.text_embeddings = None
@@ -277,6 +287,8 @@ class SAM3Segmentation:
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+            if hasattr(torch.cuda, "ipc_collect"):
+                torch.cuda.ipc_collect()
 
     def __enter__(self) -> "SAM3Segmentation":
         if self.model is None or self.processor is None:

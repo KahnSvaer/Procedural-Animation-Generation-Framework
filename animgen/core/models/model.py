@@ -12,7 +12,7 @@ from animgen.rigging.skinning import compute_auto_skin_weights
 
 
 class BaseModelClass:
-    def __init__(self, mesh: str | Path | trimesh.Trimesh, renderer_size=(1024, 1024)):
+    def __init__(self, mesh: str | Path | trimesh.Trimesh, renderer_size=(512, 512)):
         if not isinstance(mesh, trimesh.Trimesh):
             self.mesh: trimesh.Trimesh = load_model(mesh)
         else:
@@ -109,6 +109,9 @@ class BaseModelClass:
             sampling_args=sampling_args,
             verbose=verbose,
         )
+        if self._renderer is not None:
+            self._renderer.delete()
+            self._renderer = None
         return output
 
     def compute_skin_weights(self) -> dict[str, np.ndarray]:
