@@ -320,22 +320,50 @@ class FishModels(Pipeline):
         face_areas = triangle_areas(mesh.vertices, mesh.faces)
         total_mesh_area = float(np.sum(face_areas))
 
-        # Multi-view SAM3 Vision Inference (if enabled)
+        # Multi-view SAM3 Vision Inference on high-res / subdivided geometry
         if self.use_sam and self.face_prompt_detected is None:
             try:
                 from animgen.rigging.SAM3 import SAM3Segmentation
                 from animgen.rigging.backproject import backproject_masks_to_faces
+                from scipy.spatial import cKDTree
 
                 sam_prompts = (
                     self.prompts if self.prompts else list(DEFAULT_FISH_PROMPTS)
                 )
+
+                # Create an 8x-16x subdivided proxy mesh for ultra-fine SAM rasterization
+                # so SAM camera views rasterize micro-triangles at fin attachment creases
+                # rather than coarse polygons spanning into the torso.
+                sub_mesh = mesh.copy()
+                try:
+                    if num_faces < 15000:
+                        sub_mesh = sub_mesh.subdivide().subdivide()
+                    elif num_faces < 50000:
+                        sub_mesh = sub_mesh.subdivide()
+                except Exception:
+                    sub_mesh = mesh.copy()
+
+                sub_model = self.model if sub_mesh is mesh else BaseModelClass(sub_mesh)
                 with SAM3Segmentation(prompts=sam_prompts) as sam3:
-                    masks_dict = sam3(self.model, threshold=0.5, mask_threshold=0.5)
-                    self.face_prompt_detected = backproject_masks_to_faces(
+                    masks_dict = sam3(sub_model, threshold=0.5, mask_threshold=0.5)
+                    sub_face_prompts = backproject_masks_to_faces(
                         masks_dict,
-                        self.model.views_output["faces"],
-                        num_faces,
+                        sub_model.views_output["faces"],
+                        len(sub_mesh.faces),
                     )
+
+                if sub_mesh is not mesh:
+                    # Transfer fine sub-mesh face votes back to original mesh faces via KD-Tree
+                    sub_centroids = sub_mesh.triangles.mean(axis=1)
+                    tree = cKDTree(sub_centroids)
+                    orig_centroids = mesh.triangles.mean(axis=1)
+                    _, nearest_idxs = tree.query(orig_centroids, k=1)
+                    self.face_prompt_detected = {
+                        p: sub_face_prompts[p][nearest_idxs] for p in sub_face_prompts
+                    }
+                else:
+                    self.face_prompt_detected = sub_face_prompts
+
             except Exception as e:
                 print(
                     f"[FishModels.segment] SAM3 inference unavailable or failed ({e}), falling back to pure 3D SDF."
@@ -432,14 +460,17 @@ class FishModels(Pipeline):
                 face_label_array[comp] = part_id
             part_id += 1
 
+        # 1. Fill isolated face gaps with majority voting
         refined_face_labels = _fill_face_gaps(
             mesh, face_label_array, adj_dict, max_iters=2
         )
-        expanded_face_labels = _expand_fin_boundaries(
-            mesh, refined_face_labels, adj_dict, rounds=1
+        # 2. Island removal FIRST (kills any detached SAM false-positive noise before dilation)
+        cleaned_face_labels = _remove_orphan_islands(
+            mesh, refined_face_labels, adj_dict, min_area_ratio=0.08
         )
-        final_face_labels = _remove_orphan_islands(
-            mesh, expanded_face_labels, adj_dict, min_area_ratio=0.08
+        # 3. Fin boundary expansion LAST (cleanly seals the root attachment crease)
+        final_face_labels = _expand_fin_boundaries(
+            mesh, cleaned_face_labels, adj_dict, rounds=1
         )
 
         canonical_map = {
@@ -1103,14 +1134,31 @@ class FishModels(Pipeline):
             if r_faces:
                 root_r, tip_r = self._get_fin_endpoints(r_faces)
 
+            # Enforce strict bilateral left-right symmetry across sagittal plane (Z=0)
+            if root_l is not None and root_r is not None:
+                sym_root_x = float(0.5 * (root_l[0] + root_r[0]))
+                sym_root_y = float(0.5 * (root_l[1] + root_r[1]))
+                sym_root_z = float(0.5 * (abs(root_l[2]) + abs(root_r[2])))
+
+                sym_tip_x = float(0.5 * (tip_l[0] + tip_r[0]))
+                sym_tip_y = float(0.5 * (tip_l[1] + tip_r[1]))
+                sym_tip_z = float(0.5 * (abs(tip_l[2]) + abs(tip_r[2])))
+
+                root_l = np.array([sym_root_x, sym_root_y, sym_root_z])
+                tip_l = np.array([sym_tip_x, sym_tip_y, sym_tip_z])
+                root_r = np.array([sym_root_x, sym_root_y, -sym_root_z])
+                tip_r = np.array([sym_tip_x, sym_tip_y, -sym_tip_z])
+            elif root_l is not None:
+                root_r = np.array([root_l[0], root_l[1], -abs(root_l[2])])
+                tip_r = np.array([tip_l[0], tip_l[1], -abs(tip_l[2])])
+            elif root_r is not None:
+                root_l = np.array([root_r[0], root_r[1], abs(root_r[2])])
+                tip_l = np.array([tip_r[0], tip_r[1], abs(tip_r[2])])
+
             # Determine the common parent bone along the spine for both side fins
             fin_x = None
-            if root_l is not None and root_r is not None:
-                fin_x = 0.5 * (root_l[0] + root_r[0])
-            elif root_l is not None:
+            if root_l is not None:
                 fin_x = root_l[0]
-            elif root_r is not None:
-                fin_x = root_r[0]
 
             if fin_x is not None:
                 common_parent_bone = min(

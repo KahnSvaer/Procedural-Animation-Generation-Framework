@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 import trimesh
 from animgen.core.armature import Armature, Bone
 from animgen.rigging.skinning import (
@@ -324,9 +325,10 @@ def test_skinning_blender_correlation():
     Validates that our pure NumPy/SciPy Bone Heat solver correlates with
     Blender's native ARMATURE_AUTO bone heat weighting.
     """
-    import pytest
-
-    pytest.importorskip("bpy")
+    try:
+        import bpy  # noqa: F401
+    except (ImportError, Exception) as e:
+        pytest.skip(f"bpy import failed: {e}")
 
     mesh = trimesh.creation.cylinder(radius=0.5, height=3.0, sections=24)
     b0 = Bone(id="b0", head=(0, 0, -1.5), tail=(0, 0, -0.5))
