@@ -20,8 +20,8 @@ class Pipeline(ABC):
         prompts: list[str] | None = None,
         prompts_embedding_path: Path | None = None,
     ):
+        model.clear_renders(delete_renderer=True)
         self.model = copy.deepcopy(model)
-        self.model.clear_renders(delete_renderer=True)
 
         self.prompts = prompts
         self.prompts_embedding_path = prompts_embedding_path
