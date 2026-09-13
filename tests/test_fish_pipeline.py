@@ -66,9 +66,9 @@ def test_fish_pipeline_on_synthetic_mesh():
     assert any("tail_" in b.id for b in armature.bones_list)
 
     assert isinstance(processed_model.animator, Animator)
-    assert "slow" in processed_model.animator.animations
-    assert "fast" in processed_model.animator.animations
+    assert "swim" in processed_model.animator.animations
     assert "idle" in processed_model.animator.animations
+    assert "sprint" in processed_model.animator.animations
 
     assert processed_model.skin_weights is not None
     assert len(processed_model.skin_weights) == 10
@@ -411,7 +411,7 @@ def test_tail_body_bones_perfect_join_and_growth_wave():
         np.testing.assert_allclose(t_bone.tail[2], last_body_bone.tail[2], atol=1e-5)
 
     # Growth-based wave checks
-    for clip_name in ["slow", "fast", "idle"]:
+    for clip_name in ["swim", "idle", "sprint"]:
         clip_cfg = pipeline.animations[clip_name]
         assert "growth_factor" in clip_cfg
         assert clip_cfg["growth_factor"] > 0.0
@@ -434,10 +434,8 @@ def test_dorsal_to_tail_spine_straightness():
         pipe = FishModels(model)
         processed = pipe.process()
 
-        tail_faces = pipe.segments.get("tail", []) or pipe.segments.get("Tail Fin", [])
-        dorsal_faces = pipe.segments.get("dorsal_fin", []) or pipe.segments.get(
-            "Top Fin", []
-        )
+        tail_faces = pipe.segments.get("tail", [])
+        dorsal_faces = pipe.segments.get("dorsal_fin", [])
 
         if tail_faces and dorsal_faces:
             t_v = processed.mesh.vertices[np.unique(processed.mesh.faces[tail_faces])]
@@ -480,13 +478,13 @@ def test_fish_align_head_tail_detection():
     pipe.align()
 
     # Verify tail faces are now at positive X
-    tail_faces = pipe.segments.get("tail", []) or pipe.segments.get("Tail Fin", [])
+    tail_faces = pipe.segments.get("tail", [])
     assert len(tail_faces) > 0
     t_verts = pipe.model.mesh.vertices[np.unique(pipe.model.mesh.faces[tail_faces])]
     assert t_verts[:, 0].mean() > 0.0, "Tail was not aligned to positive X"
 
     # Verify top fin is positioned before the tail fin
-    top_faces = pipe.segments.get("dorsal_fin", []) or pipe.segments.get("Top Fin", [])
+    top_faces = pipe.segments.get("dorsal_fin", [])
     if top_faces:
         top_verts = pipe.model.mesh.vertices[
             np.unique(pipe.model.mesh.faces[top_faces])

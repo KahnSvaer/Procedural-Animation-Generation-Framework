@@ -12,7 +12,7 @@ from animgen.core.models.model import BaseModelClass
 from animgen.core.spline import Spline
 from animgen.core.armature import Armature, Bone
 from animgen.animation.animator import Animator, AnimationClip
-from animgen.animation.wave import chain_wave_generator
+from animgen.animation.kinematics import successive_rotations
 from animgen.animation.straight import straighten_lateral
 from animgen.rigging.mesh_contraction import extract_skeleton
 from animgen.rigging.shape_diameter_function import shape_diameter_function
@@ -149,41 +149,50 @@ DEFAULT_FISH_PARAMS: dict[str, Any] = {
     "sdf_threshold": 0.30,
     "use_sam": True,
     "animations": {
-        "slow": {
-            "wave_amplitude": 0.15,
-            "wave_duration": 2.5,
+        "swim": {
+            "wave_amplitude": 0.22,
+            "wave_duration": 1.4,
+            "num_waves": 0.85,
+            "head_amplitude_ratio": 0.08,
             "growth_factor": 0.18,
-            "num_waves": 1.2,
-            "wave_type": "travelling",
-        },
-        "fast": {
-            "wave_amplitude": 0.28,
-            "wave_duration": 1.0,
-            "growth_factor": 0.22,
-            "num_waves": 1.4,
-            "wave_type": "travelling",
+            "pectoral_mode": "active",
+            "pectoral_flap_deg": 14.0,
+            "pectoral_pitch_deg": 6.0,
+            "dorsal_flex_deg": 4.0,
+            "is_loopable": True,
         },
         "idle": {
             "wave_amplitude": 0.06,
             "wave_duration": 3.5,
-            "growth_factor": 0.12,
             "num_waves": 1.0,
-            "wave_type": "travelling",
+            "head_amplitude_ratio": 0.04,
+            "growth_factor": 0.12,
+            "pectoral_mode": "active",
+            "pectoral_flap_deg": 4.0,
+            "pectoral_pitch_deg": 2.0,
+            "dorsal_flex_deg": 1.5,
+            "is_loopable": True,
+        },
+        "sprint": {
+            "wave_amplitude": 0.30,
+            "wave_duration": 0.85,
+            "num_waves": 0.85,
+            "head_amplitude_ratio": 0.14,
+            "growth_factor": 0.22,
+            "pectoral_mode": "closed",
+            "pectoral_close_deg": 35.0,
+            "dorsal_flex_deg": 5.0,
+            "is_loopable": True,
         },
     },
 }
 
 PART_COLOR_PALETTE: dict[str, list[int]] = {
     "body": [75, 85, 95, 255],
-    "Main Body": [75, 85, 95, 255],
     "tail": [255, 60, 60, 255],
-    "Tail Fin": [255, 60, 60, 255],
     "dorsal_fin": [0, 200, 255, 255],
-    "Top Fin": [0, 200, 255, 255],
     "left_pectoral_fin": [0, 230, 118, 255],
-    "Left Pectoral Fin": [0, 230, 118, 255],
     "right_pectoral_fin": [255, 180, 0, 255],
-    "Right Pectoral Fin": [255, 180, 0, 255],
 }
 
 
@@ -282,13 +291,6 @@ class FishModels(Pipeline):
                     self.animations[clip_name] = clip_cfg
 
         self.initial_mesh: trimesh.Trimesh = self.model.mesh.copy()
-        # Welded working mesh copy for pipeline topological graph analysis (SDF, graph adjacency, skeleton)
-        # Preserves self.model.mesh with 100% original vertices, UV maps, materials, and textures intact.
-        self.working_mesh: trimesh.Trimesh = self.model.mesh.copy()
-        try:
-            self.working_mesh.merge_vertices(merge_tex=True, merge_norm=True)
-        except Exception:
-            pass
 
         self.segments: dict[str, list[int]] = {}
         self.face_prompt_detected: Optional[dict[str, np.ndarray]] = None
@@ -444,13 +446,12 @@ class FishModels(Pipeline):
             mesh=mesh,
             raw_clusters=raw_clusters,
             total_mesh_area=total_mesh_area,
-            face_prompt_detected=self.face_prompt_detected,
         )
 
         # Part Assembly & Morphological Refinement
         face_label_array = np.zeros(num_faces, dtype=np.int32)
-        label_to_id: dict[str, int] = {"Main Body": 0}
-        id_to_label: dict[int, str] = {0: "Main Body"}
+        label_to_id: dict[str, int] = {"body": 0}
+        id_to_label: dict[int, str] = {0: "body"}
 
         part_id = 1
         for label, comp_list in classified_appendages.items():
@@ -464,7 +465,7 @@ class FishModels(Pipeline):
         refined_face_labels = _fill_face_gaps(
             mesh, face_label_array, adj_dict, max_iters=2
         )
-        # 2. Island removal FIRST (kills any detached SAM false-positive noise before dilation)
+        # 2. Island removal FIRST (kills any detached false-positive noise before dilation)
         cleaned_face_labels = _remove_orphan_islands(
             mesh, refined_face_labels, adj_dict, min_area_ratio=0.08
         )
@@ -473,26 +474,11 @@ class FishModels(Pipeline):
             mesh, cleaned_face_labels, adj_dict, rounds=1
         )
 
-        canonical_map = {
-            "Main Body": "body",
-            "body": "body",
-            "Tail Fin": "tail",
-            "tail": "tail",
-            "Top Fin": "dorsal_fin",
-            "dorsal_fin": "dorsal_fin",
-            "Left Pectoral Fin": "left_pectoral_fin",
-            "left_pectoral_fin": "left_pectoral_fin",
-            "Right Pectoral Fin": "right_pectoral_fin",
-            "right_pectoral_fin": "right_pectoral_fin",
-        }
-
         segments: dict[str, list[int]] = {}
         for pid, label in id_to_label.items():
             if pid == 0:
                 continue
-            p_faces = np.where(final_face_labels == pid)[0].tolist()
-            can_k = canonical_map.get(label, label.lower().replace(" ", "_"))
-            segments[can_k] = p_faces
+            segments[label] = np.where(final_face_labels == pid)[0].tolist()
 
         all_fin_faces = set()
         for k, v in segments.items():
@@ -509,10 +495,9 @@ class FishModels(Pipeline):
         mesh: trimesh.Trimesh,
         raw_clusters: list[np.ndarray],
         total_mesh_area: float,
-        face_prompt_detected: Optional[dict[str, np.ndarray]] = None,
     ) -> dict[str, list[np.ndarray]]:
         """
-        Classifies geometric candidate clusters into Tail Fin, Top Fin, and Left/Right Pectoral Fins.
+        Classifies geometric candidate clusters into tail, dorsal_fin, and left_pectoral_fin / right_pectoral_fin.
         """
         face_areas = triangle_areas(mesh.vertices, mesh.faces)
         major_area_threshold = 0.0020 * total_mesh_area
@@ -527,25 +512,12 @@ class FishModels(Pipeline):
             centroid = c_verts.mean(axis=0)
             max_abs_z = float(np.max(np.abs(c_verts[:, 2])))
 
-            prompt_votes: dict[str, int] = {}
-            top_prompt = "None"
-            if face_prompt_detected is not None:
-                prompt_votes = {
-                    p: int(np.sum(face_prompt_detected[p][cluster]))
-                    for p in face_prompt_detected
-                }
-                if any(v > 0 for v in prompt_votes.values()):
-                    top_prompt = max(prompt_votes, key=prompt_votes.get)
-
             cluster_meta.append(
                 {
                     "faces": cluster,
                     "area": area,
-                    "area_pct": (area / total_mesh_area) * 100.0,
                     "centroid": centroid,
                     "max_abs_z": max_abs_z,
-                    "prompt_votes": prompt_votes,
-                    "top_prompt": top_prompt,
                     "label": None,
                 }
             )
@@ -554,17 +526,17 @@ class FishModels(Pipeline):
         for c in cluster_meta:
             cx, cy, cz = c["centroid"]
 
-            # Keel / Peduncle ridge anomaly filter -> retain in Main Body
+            # Keel / Peduncle ridge anomaly filter -> retain in body
             if 0.45 <= cx < 0.70 and abs(cz) < 0.06 and cy < -0.12:
-                c["label"] = "Main Body"
+                c["label"] = "body"
                 continue
 
-            # Tail Fin: all extreme posterior clusters (caudal lobes and finlets)
+            # Tail Fin: extreme posterior clusters
             if cx >= 0.65 or (cx > 0.58 and abs(cz) < 0.08 and abs(cy) < 0.20):
-                c["label"] = "Tail Fin"
+                c["label"] = "tail"
             # Dorsal Fin: top midline ridge
             elif cy > 0.08 and abs(cz) < 0.15:
-                c["label"] = "Top Fin"
+                c["label"] = "dorsal_fin"
 
         # 2. Pass 2: Bilateral Paired Pectoral Fins (Side Fins)
         unlabeled = [c for c in cluster_meta if c["label"] is None]
@@ -581,19 +553,19 @@ class FishModels(Pipeline):
 
         for i, c in enumerate(left_candidates):
             if i == 0 and (c["max_abs_z"] > 0.12 or c["centroid"][1] >= -0.15):
-                c["label"] = "Left Pectoral Fin"
+                c["label"] = "left_pectoral_fin"
             else:
-                c["label"] = "Main Body"
+                c["label"] = "body"
 
         for i, c in enumerate(right_candidates):
             if i == 0 and (c["max_abs_z"] > 0.12 or c["centroid"][1] >= -0.15):
-                c["label"] = "Right Pectoral Fin"
+                c["label"] = "right_pectoral_fin"
             else:
-                c["label"] = "Main Body"
+                c["label"] = "body"
 
         classified: dict[str, list[np.ndarray]] = defaultdict(list)
         for c in cluster_meta:
-            if c["label"] and c["label"] != "Main Body":
+            if c["label"] and c["label"] != "body":
                 classified[c["label"]].append(c["faces"])
 
         return classified
@@ -606,11 +578,6 @@ class FishModels(Pipeline):
 
         if isinstance(fin, str):
             faces = self.segments.get(fin, [])
-            if not faces:
-                for k, v in self.segments.items():
-                    if k.lower().replace(" ", "_") == fin.lower().replace(" ", "_"):
-                        faces = v
-                        break
             if not faces:
                 raise ValueError(f"Fin segment '{fin}' not found in model segments.")
             return mesh.vertices[np.unique(mesh.faces[faces])]
@@ -630,7 +597,7 @@ class FishModels(Pipeline):
         mesh = self.model.mesh
         if mesh is None:
             return np.zeros(3)
-        body_faces = self.segments.get("body", []) or self.segments.get("Main Body", [])
+        body_faces = self.segments.get("body", [])
         if len(body_faces) > 0:
             return mesh.vertices[np.unique(mesh.faces[body_faces])].mean(axis=0)
         return mesh.vertices.mean(axis=0)
@@ -736,7 +703,7 @@ class FishModels(Pipeline):
         str
             'vertical' or 'horizontal'
         """
-        tail_faces = self.segments.get("tail", []) or self.segments.get("Tail Fin", [])
+        tail_faces = self.segments.get("tail", [])
         if not tail_faces:
             return "vertical"
 
@@ -759,10 +726,8 @@ class FishModels(Pipeline):
         x_mid = 0.5 * (x_min + x_max)
 
         # Use segmentation results: compare Tail Fin and Top Fin (Dorsal Fin) positions
-        tail_faces = self.segments.get("tail", []) or self.segments.get("Tail Fin", [])
-        top_faces = self.segments.get("dorsal_fin", []) or self.segments.get(
-            "Top Fin", []
-        )
+        tail_faces = self.segments.get("tail", [])
+        top_faces = self.segments.get("dorsal_fin", [])
 
         is_backwards = False
         if tail_faces:
@@ -817,10 +782,6 @@ class FishModels(Pipeline):
             if left_f or right_f:
                 self.segments["left_pectoral_fin"] = right_f
                 self.segments["right_pectoral_fin"] = left_f
-                if "Left Pectoral Fin" in self.segments:
-                    self.segments["Left Pectoral Fin"] = right_f
-                if "Right Pectoral Fin" in self.segments:
-                    self.segments["Right Pectoral Fin"] = left_f
 
             # Re-detect tail orientation in aligned coordinate space
             self.tail_orientation = self._detect_tail_orientation()
@@ -851,8 +812,8 @@ class FishModels(Pipeline):
         straighten_axis = "z" if self.tail_orientation == "vertical" else "y"
 
         # Extract 1D spine from body (excluding tail fin lobes to prevent distortion)
-        body_faces = segments.get("body", []) or segments.get("Main Body", [])
-        tail_faces = segments.get("tail", []) or segments.get("Tail Fin", [])
+        body_faces = segments.get("body", [])
+        tail_faces = segments.get("tail", [])
 
         if body_faces and len(body_faces) > 50:
             body_verts = mesh.vertices[np.unique(mesh.faces[body_faces])]
@@ -972,8 +933,8 @@ class FishModels(Pipeline):
                 target_spine[:, 0] = float(np.mean(target_spine[:, 0]))
 
         # Straight line from dorsal fin level to caudal peduncle along target spine
-        dorsal_faces = segments.get("dorsal_fin", []) or segments.get("Top Fin", [])
-        tail_faces = segments.get("tail", []) or segments.get("Tail Fin", [])
+        dorsal_faces = segments.get("dorsal_fin", [])
+        tail_faces = segments.get("tail", [])
         if dorsal_faces:
             d_verts = straight_mesh.vertices[
                 np.unique(straight_mesh.faces[dorsal_faces])
@@ -1039,7 +1000,7 @@ class FishModels(Pipeline):
         body_armature_verts = self.target_spine[body_armature_indices].copy()
 
         # Tail bone chain continuing in a straight line at tail level
-        tail_faces = segments.get("tail", []) or segments.get("Tail Fin", [])
+        tail_faces = segments.get("tail", [])
         if tail_faces:
             tail_v = mesh.vertices[np.unique(mesh.faces[tail_faces])]
             x_tail_end = float(tail_v[:, 0].max())
@@ -1049,37 +1010,6 @@ class FishModels(Pipeline):
             x_tail_end = float(mesh.bounds[1, 0])
             y_tail_mid = float(body_armature_verts[-1, 1])
             z_tail_mid = float(body_armature_verts[-1, 2])
-
-        dorsal_faces = segments.get("dorsal_fin", []) or segments.get("Top Fin", [])
-        if dorsal_faces:
-            d_v = mesh.vertices[np.unique(mesh.faces[dorsal_faces])]
-            x_dorsal = float(d_v[:, 0].mean())
-        else:
-            x_dorsal = float(
-                body_armature_verts[0, 0]
-                + 0.4 * (body_armature_verts[-1, 0] - body_armature_verts[0, 0])
-            )
-
-        # Set straight line at tail level (y_tail_mid, z_tail_mid) extending forward from tail to x_dorsal
-        for i in range(len(body_armature_verts)):
-            if body_armature_verts[i, 0] >= x_dorsal:
-                body_armature_verts[i, 1] = y_tail_mid
-                body_armature_verts[i, 2] = z_tail_mid
-            else:
-                t_blend = (body_armature_verts[i, 0] - body_armature_verts[0, 0]) / max(
-                    x_dorsal - body_armature_verts[0, 0], 1e-6
-                )
-                t_blend = float(np.clip(t_blend, 0.0, 1.0))
-                body_armature_verts[i, 1] = (1.0 - t_blend) * body_armature_verts[
-                    0, 1
-                ] + t_blend * y_tail_mid
-                body_armature_verts[i, 2] = (1.0 - t_blend) * body_armature_verts[
-                    0, 2
-                ] + t_blend * z_tail_mid
-
-        # Ensure perfect continuity at the junction point
-        body_armature_verts[-1, 1] = y_tail_mid
-        body_armature_verts[-1, 2] = z_tail_mid
 
         if self.rig_tail and self.num_tail_bones > 0:
             tail_x_pts = np.linspace(
@@ -1119,12 +1049,8 @@ class FishModels(Pipeline):
 
         # Rig Side Pectoral Fins (Left & Right)
         if self.rig_pectoral_fins:
-            l_faces = segments.get("left_pectoral_fin", []) or segments.get(
-                "Left Pectoral Fin", []
-            )
-            r_faces = segments.get("right_pectoral_fin", []) or segments.get(
-                "Right Pectoral Fin", []
-            )
+            l_faces = segments.get("left_pectoral_fin", [])
+            r_faces = segments.get("right_pectoral_fin", [])
 
             root_l, tip_l = None, None
             if l_faces:
@@ -1186,7 +1112,7 @@ class FishModels(Pipeline):
 
         # Rig Dorsal Fin (Top Fin) if enabled
         if self.rig_dorsal_fin:
-            d_faces = segments.get("dorsal_fin", []) or segments.get("Top Fin", [])
+            d_faces = segments.get("dorsal_fin", [])
             if d_faces:
                 d_verts = mesh.vertices[np.unique(mesh.faces[d_faces])]
                 if len(d_verts) > 0:
@@ -1209,8 +1135,9 @@ class FishModels(Pipeline):
 
     def animate(self) -> Animator:
         """
-        Dynamically creates and registers procedural carangiform/thunniform wave
-        animation clips steered into the plane of the detected tail orientation.
+        Dynamically creates and registers procedural swimming, idle, and sprint
+        animation clips steered into the plane of the detected tail orientation
+        with anchored head stabilization and synchronized fin kinematics.
 
         Returns
         -------
@@ -1226,43 +1153,179 @@ class FishModels(Pipeline):
         animator = Animator(armature=armature)
 
         # Primary longitudinal chain (spine + tail bones)
-        longitudinal_bones = [
+        spine_indices = [
             i
             for i, b in enumerate(armature.bones_list)
             if "pectoral" not in b.id and "dorsal" not in b.id
         ]
+        bones = [armature.bones_list[i] for i in spine_indices]
+
+        # Extract cumulative arc-length distances along the spine
+        positions = [np.array(bones[0].head, dtype=np.float64)]
+        for b in bones:
+            positions.append(np.array(b.tail, dtype=np.float64))
+        positions = np.array(positions)
+
+        seg_vectors = np.diff(positions, axis=0)
+        seg_lengths = np.linalg.norm(seg_vectors, axis=1)
+        cum_dist = np.concatenate(([0.0], np.cumsum(seg_lengths)))
+        total_len = cum_dist[-1]
+        norm_s = cum_dist / max(total_len, 1e-6)
+
+        bind_positions = np.stack(
+            [cum_dist, np.zeros_like(cum_dist), np.zeros_like(cum_dist)], axis=-1
+        )
 
         if self.tail_orientation is None:
             self.tail_orientation = self._detect_tail_orientation()
 
+        # Steer rotation: Fish undulate across Z (transverse/yaw), Cetaceans across Y (sagittal/pitch)
         if self.tail_orientation == "vertical":
-            steer_matrix = np.asarray(
-                trimesh.transformations.rotation_matrix(np.pi / 2, [1, 0, 0])[:3, :3],
-                dtype=np.float64,
-            )
+            steer_rot = trimesh.transformations.rotation_matrix(np.pi / 2, [1, 0, 0])[
+                :3, :3
+            ]
         else:
-            steer_matrix = np.eye(3, dtype=np.float64)
+            steer_rot = np.eye(3)
+
+        l_pec_idx = next(
+            (i for i, b in enumerate(armature.bones_list) if "left_pectoral" in b.id),
+            None,
+        )
+        r_pec_idx = next(
+            (i for i, b in enumerate(armature.bones_list) if "right_pectoral" in b.id),
+            None,
+        )
+        dorsal_idx = next(
+            (i for i, b in enumerate(armature.bones_list) if "dorsal" in b.id),
+            None,
+        )
+
+        num_total_bones = len(armature.bones_list)
 
         for clip_name, clip_cfg in self.animations.items():
-            clip_duration = clip_cfg.get("wave_duration", 2.0)
+            wave_amplitude = clip_cfg.get("wave_amplitude", 0.22)
+            wave_duration = clip_cfg.get("wave_duration", 1.4)
+            num_waves = clip_cfg.get("num_waves", 0.85)
+            head_amplitude_ratio = clip_cfg.get("head_amplitude_ratio", 0.08)
+            pectoral_mode = clip_cfg.get("pectoral_mode", "active")
+            pectoral_flap_deg = clip_cfg.get("pectoral_flap_deg", 14.0)
+            pectoral_pitch_deg = clip_cfg.get("pectoral_pitch_deg", 6.0)
+            pectoral_close_deg = clip_cfg.get("pectoral_close_deg", 35.0)
+            dorsal_flex_deg = clip_cfg.get("dorsal_flex_deg", 4.0)
+            is_loopable = clip_cfg.get("is_loopable", True)
+
+            # Smooth Quadratic Envelope: Anchors snout and smoothly expands toward caudal fin
+            envelope = head_amplitude_ratio + (1.0 - head_amplitude_ratio) * (norm_s**2)
+
+            num_frames = int(round(wave_duration * self.frame_rate))
+            times = np.linspace(0.0, wave_duration, num_frames, endpoint=False)
+            omega = 2.0 * np.pi / wave_duration
+            k = 2.0 * np.pi * num_waves / total_len
+
+            clip_positions: dict[float, list[np.ndarray]] = {}
+
+            for t in times:
+                phase = k * cum_dist - omega * t
+                amp = wave_amplitude * envelope
+                d_env_ds = np.gradient(amp, cum_dist)
+                dy_dx = d_env_ds * np.sin(phase) + amp * k * np.cos(phase)
+
+                tangents = np.stack(
+                    [np.ones_like(dy_dx), dy_dx, np.zeros_like(dy_dx)], axis=-1
+                )
+                tangents /= np.linalg.norm(tangents, axis=-1, keepdims=True)
+
+                frame_pts = [np.array([0.0, 0.0, 0.0])]
+                for i in range(len(seg_lengths)):
+                    frame_pts.append(frame_pts[-1] + seg_lengths[i] * tangents[i])
+                frame_pts = np.array(frame_pts)
+                frame_pts[:, 1] -= np.mean(frame_pts[:, 1])
+
+                raw_rots = successive_rotations(
+                    bind_positions, frame_pts, is_positions=True
+                )
+                rot_matrices = [
+                    r.detach().cpu().numpy()
+                    if isinstance(r, torch.Tensor)
+                    else np.asarray(r)
+                    for r in raw_rots
+                ]
+                if steer_rot is not None:
+                    rot_matrices = [steer_rot @ R @ steer_rot.T for R in rot_matrices]
+
+                full_frame = [
+                    np.eye(3, dtype=np.float32) for _ in range(num_total_bones)
+                ]
+                for idx_in_spine, bone_idx in enumerate(spine_indices):
+                    full_frame[bone_idx] = rot_matrices[idx_in_spine].astype(np.float32)
+
+                # Pectoral Fin Kinematics
+                if pectoral_mode == "closed":
+                    tuck_angle = np.radians(pectoral_close_deg)
+                    flutter = np.radians(2.0) * np.sin(omega * t)
+                    if l_pec_idx is not None:
+                        R_fold_l = trimesh.transformations.rotation_matrix(
+                            -tuck_angle, [0, 1, 0]
+                        )[:3, :3]
+                        R_roll_l = trimesh.transformations.rotation_matrix(
+                            flutter, [1, 0, 0]
+                        )[:3, :3]
+                        full_frame[l_pec_idx] = (R_fold_l @ R_roll_l).astype(np.float32)
+                    if r_pec_idx is not None:
+                        R_fold_r = trimesh.transformations.rotation_matrix(
+                            tuck_angle, [0, 1, 0]
+                        )[:3, :3]
+                        R_roll_r = trimesh.transformations.rotation_matrix(
+                            -flutter, [1, 0, 0]
+                        )[:3, :3]
+                        full_frame[r_pec_idx] = (R_fold_r @ R_roll_r).astype(np.float32)
+                else:
+                    flap_angle = np.radians(pectoral_flap_deg) * np.sin(
+                        omega * t + np.pi / 4
+                    )
+                    pitch_angle = np.radians(pectoral_pitch_deg) * np.cos(
+                        omega * t + np.pi / 4
+                    )
+                    if l_pec_idx is not None:
+                        R_roll_l = trimesh.transformations.rotation_matrix(
+                            flap_angle, [1, 0, 0]
+                        )[:3, :3]
+                        R_pitch_l = trimesh.transformations.rotation_matrix(
+                            pitch_angle, [0, 1, 0]
+                        )[:3, :3]
+                        full_frame[l_pec_idx] = (R_roll_l @ R_pitch_l).astype(
+                            np.float32
+                        )
+                    if r_pec_idx is not None:
+                        R_roll_r = trimesh.transformations.rotation_matrix(
+                            -flap_angle, [1, 0, 0]
+                        )[:3, :3]
+                        R_pitch_r = trimesh.transformations.rotation_matrix(
+                            pitch_angle, [0, 1, 0]
+                        )[:3, :3]
+                        full_frame[r_pec_idx] = (R_roll_r @ R_pitch_r).astype(
+                            np.float32
+                        )
+
+                # Dorsal Fin Stabilization Flexing
+                if dorsal_idx is not None:
+                    d_angle = np.radians(dorsal_flex_deg) * np.sin(
+                        omega * t - np.pi / 3
+                    )
+                    R_dorsal = trimesh.transformations.rotation_matrix(
+                        d_angle, [0, 0, 1]
+                    )[:3, :3]
+                    full_frame[dorsal_idx] = R_dorsal.astype(np.float32)
+
+                clip_positions[float(t)] = full_frame
 
             clip = AnimationClip(
                 name=clip_name,
-                duration=clip_duration,
+                duration=wave_duration,
                 armature=armature,
-                is_loopable=clip_cfg.get("is_loopable", True),
+                is_loopable=is_loopable,
             )
-            clip.add_animation_movements(
-                chain_wave_generator,
-                list_bones=longitudinal_bones,
-                wave_amplitude=clip_cfg.get("wave_amplitude", 0.18),
-                wave_duration=clip_duration,
-                frame_rate=self.frame_rate,
-                growth_factor=clip_cfg.get("growth_factor", 0.18),
-                num_waves=clip_cfg.get("num_waves", 1.2),
-                steer_rotation=steer_matrix,
-                wave=clip_cfg.get("wave_type", "travelling"),
-            )
+            clip.positions = clip_positions
             animator.add_animation_clip(clip)
 
         return animator

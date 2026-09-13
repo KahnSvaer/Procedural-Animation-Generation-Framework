@@ -49,6 +49,11 @@ class Animator:
         return self._animations
 
     @property
+    def clips(self) -> list[AnimationClip]:
+        """List of registered AnimationClip objects."""
+        return list(self._animations.values())
+
+    @property
     def skin_weights(self) -> Optional[dict[str, np.ndarray]]:
         """Cached skin weights mapping bone ID -> per-vertex skin weights."""
         return self._skin_weights
